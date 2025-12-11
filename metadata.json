@@ -1,0 +1,5 @@
+{
+  "name": "Magic Card Battle",
+  "description": "A multiplayer turn-based card strategy game with economy, distinct nations, and magical warfare.",
+  "requestFramePermissions": []
+}
