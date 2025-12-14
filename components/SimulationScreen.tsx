@@ -325,4 +325,44 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
                 <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-4 shadow-xl">
                     <h3 className="font-bold text-slate-400 flex items-center gap-2 border-b border-slate-800 pb-2"><Activity size={16}/> 訓練數據統計</h3>
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-slate-950 p-3 rounded border border-
+                        <div className="bg-slate-950 p-3 rounded border border-slate-800">
+                            <div className="text-xs text-slate-500 uppercase font-bold">Games</div>
+                            <div className="text-xl font-mono text-white">{gameCount} / {maxGames}</div>
+                        </div>
+                        <div className="bg-slate-950 p-3 rounded border border-slate-800">
+                            <div className="text-xs text-slate-500 uppercase font-bold">Data Points</div>
+                            <div className="text-xl font-mono text-blue-400">{dataPointCount}</div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto min-h-0 border-t border-slate-800 pt-2">
+                        <div className="text-xs text-slate-500 uppercase font-bold mb-2">Win Rates</div>
+                        {Object.entries(winStats).map(([id, wins]) => (
+                            <div key={id} className="flex justify-between text-xs mb-1">
+                                <span>{id}</span>
+                                <span className="font-mono text-green-400">{((wins / Math.max(1, gameCount)) * 100).toFixed(1)}%</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Logs Panel */}
+                <div className="lg:col-span-9 bg-black rounded-xl border border-slate-800 p-4 font-mono text-xs overflow-hidden flex flex-col shadow-xl">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
+                        <h3 className="font-bold text-slate-400 flex items-center gap-2"><Terminal size={16}/> System Logs</h3>
+                        <div className="flex gap-2">
+                            <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                            <span className="text-slate-600">{isRunning ? 'RUNNING' : 'IDLE'}</span>
+                        </div>
+                    </div>
+                    <div ref={logContainerRef} className="flex-1 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+                        {logs.length === 0 && <div className="text-slate-700 italic">Ready to start simulation...</div>}
+                        {logs.map((log, i) => (
+                            <div key={i} className="text-slate-300 border-b border-slate-900/50 pb-0.5">{log}</div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
