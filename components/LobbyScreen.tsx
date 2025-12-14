@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { NationType, GameSettings, Language, RoomPlayer, ChatMessage } from '../types';
 import { NATION_CONFIG } from '../constants';
@@ -20,8 +19,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const [isConnecting, setIsConnecting] = useState(false);
   const [showServerSettings, setShowServerSettings] = useState(false);
   
-  // Default to localhost for dev, but could be window.location.origin in prod
-  const [serverUrl, setServerUrl] = useState('http://localhost:3000');
+  // Default server URL: Empty means use socketService default (auto-detect)
+  const [serverUrl, setServerUrl] = useState('');
   const [roomIdInput, setRoomIdInput] = useState('');
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
 
@@ -85,7 +84,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const handleConnect = async () => {
       setIsConnecting(true);
       try {
-          await socketService.connect(serverUrl);
+          // If serverUrl is empty, socketService uses its internal default (origin or localhost)
+          await socketService.connect(serverUrl || undefined);
           setIsConnected(true);
       } catch (e) {
           console.error("Connection failed", e);
@@ -322,6 +322,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                           <input 
                                               value={serverUrl} 
                                               onChange={(e) => setServerUrl(e.target.value)}
+                                              placeholder={(import.meta as any).env.PROD ? 'Auto (Same Origin)' : 'http://localhost:3000'}
                                               className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-slate-300"
                                           />
                                           <button onClick={handleConnect} className="text-xs bg-slate-800 px-3 py-1 rounded border border-slate-700 hover:bg-slate-700">Save & Connect</button>

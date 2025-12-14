@@ -1,10 +1,15 @@
-
 import express from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { RoomPlayer, GameState, GameSettings, ClientAction, CardType } from '../types';
 import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, buyCard, sellCard, resolveAttack } from '../services/gameEngine';
+
+// ESM dirname workaround
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -25,6 +30,11 @@ interface RoomData {
 }
 
 const rooms: Record<string, RoomData> = {};
+
+// Serve Static Files (Vite Build)
+// This serves the frontend from the Node.js server
+const distPath = path.join(__dirname, '../dist');
+app.use('/', express.static(distPath));
 
 io.on('connection', (socket: Socket) => {
     console.log(`User connected: ${socket.id}`);
@@ -245,6 +255,11 @@ io.on('connection', (socket: Socket) => {
             }
         }
     });
+});
+
+// Handle React Routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;

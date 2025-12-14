@@ -1,15 +1,17 @@
-
 import { io, Socket } from 'socket.io-client';
 import { ClientAction, GameState, RoomPlayer } from '../types';
 
 class SocketService {
   private socket: Socket | null = null;
-  private url: string = 'http://localhost:3000'; // Default dev URL
+  
+  // Use relative path in production (same origin), localhost in dev
+  private url: string = (import.meta as any).env.PROD ? window.location.origin : 'http://localhost:3000';
 
-  public connect(url: string): Promise<void> {
-    this.url = url;
+  public connect(url?: string): Promise<void> {
+    if (url) this.url = url;
+    
     return new Promise((resolve, reject) => {
-      this.socket = io(url, {
+      this.socket = io(this.url, {
         transports: ['websocket'],
         reconnectionAttempts: 3
       });
