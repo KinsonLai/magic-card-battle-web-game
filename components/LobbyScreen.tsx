@@ -322,7 +322,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                           <input 
                                               value={serverUrl} 
                                               onChange={(e) => setServerUrl(e.target.value)}
-                                              placeholder={(import.meta as any).env.PROD ? 'Auto (Same Origin)' : 'http://localhost:3000'}
+                                              placeholder={(import.meta as any).env?.PROD ? 'Auto (Same Origin)' : 'http://localhost:3000'}
                                               className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-slate-300"
                                           />
                                           <button onClick={handleConnect} className="text-xs bg-slate-800 px-3 py-1 rounded border border-slate-700 hover:bg-slate-700">Save & Connect</button>

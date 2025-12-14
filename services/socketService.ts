@@ -1,11 +1,16 @@
+
 import { io, Socket } from 'socket.io-client';
 import { ClientAction, GameState, RoomPlayer } from '../types';
 
 class SocketService {
   private socket: Socket | null = null;
   
-  // Use relative path in production (same origin), localhost in dev
-  private url: string = (import.meta as any).env.PROD ? window.location.origin : 'http://localhost:3000';
+  // Logic:
+  // 1. If VITE_SERVER_URL is set (e.g. Netlify env var pointing to Render), use it.
+  // 2. If PROD, assume Monolith deployment (Same Origin).
+  // 3. Default to localhost for dev.
+  private url: string = (import.meta as any).env?.VITE_SERVER_URL || 
+                        ((import.meta as any).env?.PROD ? window.location.origin : 'http://localhost:3000');
 
   public connect(url?: string): Promise<void> {
     if (url) this.url = url;

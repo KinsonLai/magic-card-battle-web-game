@@ -34,7 +34,8 @@ const rooms: Record<string, RoomData> = {};
 // Serve Static Files (Vite Build)
 // This serves the frontend from the Node.js server
 const distPath = path.join(__dirname, '../dist');
-app.use('/', express.static(distPath));
+// Fix: Cast express.static result to any to resolve overload mismatch
+app.use(express.static(distPath) as any);
 
 io.on('connection', (socket: Socket) => {
     console.log(`User connected: ${socket.id}`);

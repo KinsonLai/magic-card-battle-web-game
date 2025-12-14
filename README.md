@@ -1,100 +1,67 @@
-
 # Magic Card Battle (魔法卡片對戰)
 
-A multiplayer, turn-based strategy card game built with React, TypeScript, and TailwindCSS. Players manage an economy, cast elemental spells, and engage in tactical warfare to defeat their opponents.
+這是一個基於 React、TypeScript 和 Socket.IO 的多人回合制策略卡牌遊戲。玩家需要管理經濟、施放元素法術，並運用策略擊敗對手。
 
-## 🌟 Features
+## 🌟 遊戲特色
 
-*   **Turn-Based Strategy**: Manage Gold (Money) and Mana (Magic) resources each turn.
-*   **Dynamic Economy**: Build industries (Farms, Mines, Shops) to generate passive income.
-*   **Elemental System**: 
-    *   **5 Elements**: Fire, Water, Earth, Air, Neutral.
-    *   **Reaction Mechanics**: Use elemental attacks to Prime opponents with marks, then detonate them with different elements for massive effects (Explosion, Freeze, etc.).
-*   **Physical Combat System (v3.0)**:
-    *   **30+ Unique Weapons**: From Holy Swords to Cursed Daggers.
-    *   **Alignment Bonuses**: Physical weapons are Neutral but have an Alignment (Holy/Evil).
-    *   **Soul Scale Integration**: If your Soul aligns with the weapon (e.g., Holy Soul using a Holy Sword), damage is boosted. If opposed, you suffer HP penalties.
-*   **Soul Scale**: A dynamic balance meter. Playing Holy cards shifts you to Light, Evil cards to Darkness. Reaching extremes (+3/-3) unlocks powerful passive effects and Rituals.
-*   **Card Types**:
-    *   **Attacks**: Physical (Neutral) and Magic (Elemental) attacks.
-    *   **Defense**: Counter-attack (Repel) incoming damage with your own attack cards.
-    *   **Rituals**: High-cost cards that trigger global game events (Disasters or Blessings) based on your Soul State.
-    *   **Artifacts**: Passive equipment providing permanent buffs (Income, Mana Regen, Damage).
-*   **Rarity System**: Common, Rare, Epic, and Legendary cards. Higher rarity cards appear more frequently as the game progresses.
-*   **Game Events**: Random global events (Inflation, Earthquakes, Blessings) that shake up the gameplay every 5 turns.
+*   **回合制策略**：每回合管理金錢與魔力資源。
+*   **動態經濟**：建造產業（農場、礦場、商店）以獲得被動收入。
+*   **元素系統**：
+    *   **5 種元素**：火、水、地、風、無屬性。
+    *   **反應機制**：使用元素攻擊掛載「印記」，再用不同元素引爆產生強大效果（如擴散流血、緩速泥沼等）。
+*   **物理戰鬥 (v3.0)**：
+    *   **武器與符文**：結合物理武器卡與元素符文卡進行堆疊攻擊。
+    *   **靈魂陣營**：根據你的靈魂傾向（光明/黑暗），不同陣營的武器會有加成或懲罰。
+*   **靈魂天平**：動態的平衡系統。使用神聖卡偏向光明，邪惡卡偏向黑暗。達到極端值 (+3/-3) 可解鎖強大的儀式卡。
+*   **多人連線**：支援線上開房對戰或單機 AI 對戰。
 
-## 🧠 AI Training (New!)
+---
 
-Includes a Jupyter Notebook (`train_ai.ipynb`) to train a Deep Learning model based on the game data.
+## 🚀 免費部署教學 (Render.com)
 
-1.  Open the game and go to **Simulation Mode**.
-2.  Set `Target Games` to 100+ and click **START** (use Headless mode for speed).
-3.  Click **JSON** to download the `mcts_training_data_xxxx.json`.
-4.  Place the JSON file in the project root folder.
-5.  Open `train_ai.ipynb` in VS Code or Jupyter Lab and run all cells.
-6.  The script will train a ResNet-MLP model and output `best_model.pth`.
+這是**完全免費**的部署方案，且支援多人連線功能。
 
-## 🎮 How to Play
+### 步驟 1：準備程式碼
+1. 確保你已經將此專案上傳到你的 **GitHub** 儲存庫。
 
-1.  **Start/Host**: Create a room and wait for players (or add AI bots).
-2.  **Action Phase**:
-    *   Play **Industry** cards to build your economy.
-    *   Play **Attack** cards to damage opponents. 
-    *   Use **Magic** to create elemental reactions.
-    *   Play **Rituals** to trigger game-changing events when your Soul is at max level.
-    *   Visit the **Shop** to buy new cards.
-3.  **Defense Phase**:
-    *   When attacked, you must play **Attack** cards to **Repel** (Counter-attack).
-    *   If your counter-attack damage > incoming damage, you reflect the difference back.
-4.  **Winning**: Reduce all opponents' HP to 0 to be the last one standing.
+### 步驟 2：註冊 Render
+1. 前往 [Render.com](https://render.com)。
+2. 註冊一個免費帳號 (可直接使用 GitHub 登入)。
 
-## 🛠️ Technical Stack
+### 步驟 3：建立 Web Service
+1. 在 Render 儀表板點擊 **New +** 按鈕，選擇 **Web Service**。
+2. 連結你的 GitHub 帳號，並選擇此專案的儲存庫 (Repository)。
 
-*   **Frontend**: React 18, TypeScript, Vite
-*   **Styling**: TailwindCSS
-*   **Icons**: Lucide React
-*   **State Management**: React Hooks (Context-free for this scale)
-*   **AI**: MCTS (Simulation), PyTorch (Training)
+### 步驟 4：設定參數 (重要！)
+在設定頁面填寫以下資訊：
 
-## 🚀 Deployment Guide (Netlify)
+*   **Name**: 給你的遊戲取個名字 (例如 `magic-card-battle`)。
+*   **Region**: 選擇離你最近的地區 (例如 Singapore)。
+*   **Branch**: `main` (或你的分支名稱)。
+*   **Root Directory**: 留空 (預設)。
+*   **Runtime**: 選擇 **Node**。
+*   **Build Command**: `npm install && npm run build`
+    *   這會安裝依賴並將 React 前端打包到 `dist` 資料夾。
+*   **Start Command**: `npm run start`
+    *   這會啟動 Express 伺服器，同時服務前端頁面和 Socket.IO 後端。
+*   **Instance Type**: 選擇 **Free**。
 
-This project is ready to be deployed directly to Netlify.
+### 步驟 5：部署
+1. 點擊 **Create Web Service**。
+2. 等待幾分鐘，Render 會自動安裝並部署。
+3. 完成後，你會獲得一個網址 (例如 `https://magic-card-battle.onrender.com`)。
+4. 點擊網址，你的多人連線卡牌遊戲就上線了！
 
-### Steps to Deploy:
+> **注意**：Render 的免費方案在閒置 15 分鐘後會進入休眠。下次有人訪問時，可能需要等待 30-60 秒啟動伺服器，這是正常現象。
 
-1.  **Push to GitHub**:
-    *   Initialize a git repository: `git init`
-    *   Add files: `git add .`
-    *   Commit: `git commit -m "Initial commit"`
-    *   Push to your GitHub repository.
+---
 
-2.  **Connect to Netlify**:
-    *   Log in to [Netlify](https://www.netlify.com/).
-    *   Click **"Add new site"** -> **"Import an existing project"**.
-    *   Select **GitHub**.
-    *   Choose your repository.
+## 🛠️ 技術棧
 
-3.  **Configure Build Settings**:
-    *   **Base directory**: (Leave empty)
-    *   **Build command**: `npm run build`
-    *   **Publish directory**: `dist` (This is the default output for Vite)
+*   **前端**: React 18, TypeScript, Vite, TailwindCSS
+*   **後端**: Node.js, Express, Socket.IO
+*   **圖標**: Lucide React
 
-4.  **Deploy**:
-    *   Click **"Deploy site"**.
-    *   Netlify will detect the `package.json` and build the application. Once finished, you will get a live URL.
+## 📜 授權
 
-### Local Development
-
-1.  Install dependencies:
-    ```bash
-    npm install
-    ```
-2.  Start development server:
-    ```bash
-    npm run dev
-    ```
-3.  Open browser at `http://localhost:5173`.
-
-## 📜 License
-
-MIT License. Free to use and modify.
+MIT License. 歡迎自由修改與使用。
