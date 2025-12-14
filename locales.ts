@@ -1,26 +1,13 @@
+
 import { NationType, CardType } from './types';
 import { CARDS } from './constants';
 
-const generateCardDesc = (card: any) => {
-    switch (card.effectType) {
-        case 'income': return `+${card.value} 金錢/回合`;
-        case 'damage': return `造成 ${card.value} 點傷害`;
-        case 'heal': return `恢復/獲得 ${card.value} 點生命`;
-        case 'mana': return `恢復 ${card.value} 點魔力`;
-        case 'gold_gain': return `立即獲得 ${card.value} 金錢`;
-        case 'gold_steal': return `從目標身上偷取 ${card.value} 金錢`;
-        case 'full_restore_hp': return `完全恢復生命值`;
-        case 'full_restore_mana': return `完全恢復魔力`;
-        case 'full_restore_all': return `完全恢復生命與魔力`;
-        default: return '';
-    }
-};
-
 const cardTranslations: Record<string, {name: string, desc: string}> = {};
+// Use the description directly from constants.ts as it is already in Chinese
 CARDS.forEach(c => {
     cardTranslations[c.id] = {
         name: c.name,
-        desc: generateCardDesc(c)
+        desc: c.description
     };
 });
 
@@ -50,6 +37,7 @@ const zhTW = {
     endTurn: "結束回合",
     wait: "等待中...",
     buy: "購買",
+    sell: "出售",
     close: "關閉",
     deposit: "存款",
     withdraw: "提款",
@@ -63,6 +51,30 @@ const zhTW = {
     selectTarget: "選擇目標",
     interestRate: "利率：每回合 10%",
     filterAll: "全部",
+    playSelected: "出牌",
+    combo: "連擊",
+    opponents: "對手列表",
+    selected: "已選",
+    cost: "消耗",
+    shieldUp: "展開護盾",
+    activateShield: "啟動防禦",
+    takeDamage: "直接承受傷害",
+    takeDestruction: "承受破壞",
+    block: "格擋",
+    attackExcl: "攻擊！",
+    defendExcl: "防禦！",
+    enemyDamage: "敵方傷害",
+    enemyMissile: "敵方導彈",
+    missileLevel: "破壞等級",
+    selectDefense: "請選擇手牌中的防禦卡 (格擋傷害)",
+    selectShield: "請選擇手牌中的護盾卡 (格擋破壞)",
+    selectTargetHint: "(請選擇目標)",
+    cardUsed: "使用了",
+    chatPlaceholder: "輸入訊息...",
+    send: "發送",
+    cantUseAlone: "符文卡必須與物理卡一起使用",
+    notStackable: "此卡牌不可堆疊",
+    onlyDefenseInDefensePhase: "防禦卡只能在防禦階段使用",
     nations: {
       [NationType.FIGHTER]: { name: "鬥士之國", desc: "為戰鬥而生。起始擁有較高生命值與攻擊卡。" },
       [NationType.HOLY]: { name: "神聖之國", desc: "神聖庇護。生命值會再生，起始擁有治療卡。" },
@@ -72,12 +84,14 @@ const zhTW = {
     cards: cardTranslations,
     types: {
       [CardType.INDUSTRY]: "產業",
-      [CardType.ATTACK]: "攻擊",
-      [CardType.DEFENSE]: "防禦",
-      [CardType.MISSILE]: "導彈",
-      [CardType.MAGIC]: "魔法",
+      [CardType.ATTACK]: "物理攻擊",
+      [CardType.MAGIC_ATTACK]: "魔法攻擊",
+      [CardType.HEAL]: "治療",
+      [CardType.SPECIAL]: "特殊",
       [CardType.CONTRACT]: "契約",
-      [CardType.ENCHANTMENT]: "附魔"
+      [CardType.RUNE]: "符文",
+      [CardType.RITUAL]: "儀式",
+      [CardType.ARTIFACT]: "聖物"
     }
 };
 

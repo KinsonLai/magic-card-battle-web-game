@@ -1,427 +1,1090 @@
-import React, { useState, useEffect } from 'react';
-import { GameState, NationType, Card, CardType, Language, GameSettings } from './types';
-import { createInitialState, nextTurn, executeCardEffect, buyCard, handleBankTransaction } from './services/gameEngine';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { GameState, Card, CardType, Language, GameSettings, RoomPlayer, MAX_LAND_SIZE, ChatMessage, MAX_ARTIFACT_SIZE, ElementType, PLAYS_PER_TURN, AlignmentType, StanceType } from './types';
+import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, resolveAttack, buyCard, sellCard } from './services/gameEngine';
 import { StartScreen } from './components/StartScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { CardGallery } from './components/CardGallery';
+import { GameGuide } from './components/GameGuide';
 import { Card as CardComponent } from './components/Card';
-import { NATION_CONFIG } from './constants';
+import { DebugConsole } from './components/DebugConsole';
+import { SimulationScreen } from './components/SimulationScreen';
+import { NATION_CONFIG, ELEMENT_CONFIG, ALIGNMENT_CONFIG, getComplexElementName } from './constants';
 import { TRANSLATIONS } from './locales';
-import { Coins, Heart, Zap, Landmark, Building2, ShoppingBag, Lock, Crown, Swords, TrendingUp, History } from 'lucide-react';
+import * as Icons from 'lucide-react';
+import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [screen, setScreen] = useState<'start' | 'lobby' | 'gallery' | 'game'>('start');
-  const [lang, setLang] = useState<Language>('zh-TW'); // Default Chinese
+  const [screen, setScreen] = useState<'start' | 'lobby' | 'gallery' | 'guide' | 'game' | 'simulation'>('start');
+  const [previousScreen, setPreviousScreen] = useState<'start' | 'game'>('start'); 
+  const [lang, setLang] = useState<Language>('zh-TW'); 
   const [gameState, setGameState] = useState<GameState | null>(null);
   
-  // UI State for Game
+  // UI State
   const [showShop, setShowShop] = useState(false);
-  const [showBank, setShowBank] = useState(false);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [animationData, setAnimationData] = useState<{msg: string, sourceId: string, targetId: string | null} | null>(null);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [activeTab, setActiveTab] = useState<'log'|'chat'>('log');
+  const [chatInput, setChatInput] = useState('');
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [animationData, setAnimationData] = useState<{type: 'attack'|'defense'|'repel'|'normal', value: number, msg: string, sourceName?: string, targetName?: string, cardName?: string, comboName?: string} | null>(null);
+  const [hoveredCard, setHoveredCard] = useState<{ card: Card, x: number, y: number } | null>(null);
+  const [topNotification, setTopNotification] = useState<{message: string, type: 'event'|'artifact'|'info'} | null>(null);
 
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const t = TRANSLATIONS[lang];
 
-  // AI Logic
+  // --- Helpers ---
+  const getPreviewStats = () => {
+      if (!gameState || selectedCardIds.length === 0) return null;
+      const humanPlayer = gameState.players.find(p => p.isHuman);
+      if (!humanPlayer) return null;
+      const cards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
+      if (cards.length === 0) return null;
+
+      let damage = 0;
+      let cost = 0;
+      let hpCost = 0;
+      let element = ElementType.NEUTRAL;
+      let alignment: AlignmentType | undefined = undefined;
+      let comboName = undefined;
+      let reactionBonusText = '';
+
+      const isMagic = cards.some(c => c.type === CardType.MAGIC_ATTACK);
+      const isPhysical = cards.some(c => c.type === CardType.ATTACK);
+      const runes = cards.filter(c => c.type === CardType.RUNE);
+      const weapon = cards.find(c => c.type === CardType.ATTACK);
+
+      const elements: ElementType[] = [];
+
+      // Calculate Basics
+      cards.forEach(c => {
+          cost += c.manaCost;
+          hpCost += (c.hpCost || 0);
+          if (c.element && c.element !== ElementType.NEUTRAL) elements.push(c.element);
+      });
+
+      // Calculate Damage Preview based on Stack Type
+      if (isMagic) {
+          // Magic Stack: Sum of card values
+          damage = cards.reduce((sum, c) => sum + (c.value || 0), 0);
+      } else if (weapon) {
+          // Physical Stack: Weapon Base + Weapon Bonus (based on Soul) + Rune Values
+          damage = (weapon.value || 0);
+          
+          if (humanPlayer.soul > 0 && weapon.holyBonus) damage += weapon.holyBonus;
+          else if (humanPlayer.soul < 0 && weapon.evilBonus) damage += weapon.evilBonus;
+
+          damage += runes.reduce((sum, r) => sum + (r.value || 0), 0);
+      }
+
+      if (elements.length > 0) {
+          element = elements[0]; 
+      }
+      
+      // Calculate Potential Reaction if Target Selected
+      if ((isMagic || isPhysical) && targetId) {
+          const target = gameState.players.find(p => p.id === targetId);
+          if (target && target.elementMark && element !== ElementType.NEUTRAL && element !== target.elementMark) {
+              const reaction = getComplexElementName(element, target.elementMark);
+              if (reaction) {
+                  comboName = reaction;
+                  if (reaction.includes("擴散")) reactionBonusText = "流血 + 破壞";
+                  if (reaction.includes("泥沼")) reactionBonusText = "緩速 (行動力-1)";
+                  if (reaction.includes("湮滅")) reactionBonusText = "傷害 x1.5 (反噬)";
+                  if (reaction.includes("過載")) reactionBonusText = "傷害 x1.25 (治療)";
+              }
+          }
+      }
+      
+      // Apply Multipliers
+      if (isMagic || isPhysical) {
+          if (gameState.currentEvent?.globalModifier?.damageMultiplier) damage = Math.floor(damage * gameState.currentEvent.globalModifier.damageMultiplier);
+          damage = Math.floor(damage * gameState.settings.damageMultiplier);
+          damage += humanPlayer.damageBonus;
+      }
+
+      const isDefensePhase = gameState.turnPhase === 'DEFENSE';
+
+      return { damage, defense: isDefensePhase ? damage : 0, cost, hpCost, element, alignment, comboName, reactionBonusText, isAttack: isMagic || isPhysical, isDefensePhase };
+  };
+
+  const preview = getPreviewStats();
+
+  // --- Effects ---
+  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.gameLog]);
+  useEffect(() => { if (activeTab === 'chat') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.chat, activeTab]);
+
   useEffect(() => {
-    if (!gameState || gameState.winnerId || screen !== 'game') return;
+      if (gameState?.topNotification) {
+          setTopNotification(gameState.topNotification);
+          const timer = setTimeout(() => setTopNotification(null), 5000);
+          return () => clearTimeout(timer);
+      }
+  }, [gameState?.topNotification]);
 
-    const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-    if (!currentPlayer.isHuman) {
-      const delayMap = { 'easy': 2000, 'normal': 1500, 'hard': 1000 };
-      const delay = delayMap[gameState.settings.botDifficulty];
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          if (e.key === '`' || e.key === '~') {
+              setShowDebug(prev => !prev);
+          }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-      const timer = setTimeout(() => {
-        let newState = { ...gameState };
-        
-        // 1. Shop (Rich AI buys cards)
-        if (currentPlayer.gold > 150 && newState.shopCards.some(c => c.cost <= currentPlayer.gold)) {
-             const affordable = newState.shopCards.filter(c => c.cost <= currentPlayer.gold);
-             if (affordable.length > 0) newState = buyCard(newState, affordable[0]);
-        }
+  useEffect(() => {
+      const handleMouseMove = (e: MouseEvent) => {
+          if (hoveredCard) {
+              setHoveredCard(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
+          }
+      };
+      window.addEventListener('mousemove', handleMouseMove);
+      return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [hoveredCard]);
 
-        // 2. Play Cards
-        const playable = currentPlayer.hand.filter(c => c.manaCost <= currentPlayer.mana);
-        let plays = 0;
-        let playedTypes: CardType[] = [];
+  // AI & Game Loop
+  useEffect(() => {
+    if (!gameState || gameState.winnerId || screen !== 'game' || gameState.isDisconnected) return;
 
-        for (const card of playable) {
-            if (plays >= 2) break;
-            if (playedTypes.includes(card.type)) continue;
-
-            const enemies = newState.players.filter(p => p.id !== currentPlayer.id && !p.isDead);
-            let target = enemies[0];
-            if (gameState.settings.botDifficulty === 'hard') {
-                target = enemies.sort((a,b) => a.hp - b.hp)[0];
-            } else {
-                target = enemies[Math.floor(Math.random() * enemies.length)];
+    if (gameState.turnPhase === 'ACTION') {
+        const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+        if (!currentPlayer.isHuman) {
+          const delay = 1500;
+          const timer = setTimeout(() => {
+            let newState = { ...gameState };
+            if (!currentPlayer.hasPurchasedInShop && currentPlayer.gold > 150) {
+                const available = newState.shopCards.filter(c => !c.purchasedByPlayerIds?.includes(currentPlayer.id));
+                const affordable = available.filter(c => c.cost <= currentPlayer.gold);
+                if (affordable.length > 0) newState = buyCard(newState, affordable[0]);
             }
-            
-            newState = executeCardEffect(newState, card, target?.id);
-            playedTypes.push(card.type);
-            plays++;
+            if (currentPlayer.playsUsed < currentPlayer.maxPlays) {
+                const playable = currentPlayer.hand.filter(c => c.manaCost <= currentPlayer.mana && (!c.hpCost || c.hpCost < currentPlayer.hp));
+                if (playable.length > 0) {
+                     const card = playable[Math.floor(Math.random() * playable.length)];
+                     const enemies = newState.players.filter(p => p.id !== currentPlayer.id && !p.isDead);
+                     let target = enemies[Math.floor(Math.random() * enemies.length)];
+                     if (card.type === CardType.ATTACK || card.type === CardType.MAGIC_ATTACK) {
+                          if (target) newState = executeAttackAction(newState, [card], target.id);
+                     } else {
+                         if (['heal', 'mana', 'full_restore_hp', 'buff_damage'].includes(card.effectType || '') || card.type === CardType.HEAL || card.type === CardType.ARTIFACT) {
+                             newState = executeCardEffect(newState, card, currentPlayer.id);
+                         } else if (card.type === CardType.RITUAL) {
+                             newState = executeCardEffect(newState, card); // Global
+                         } else {
+                             newState = executeCardEffect(newState, card, target?.id);
+                         }
+                     }
+                } else {
+                     setGameState(nextTurn(newState));
+                }
+            } else {
+                 setGameState(nextTurn(newState));
+            }
+            if (newState.turnPhase === 'ACTION' && newState !== gameState) {
+                 setGameState(nextTurn(newState));
+            } else {
+                 setGameState(newState);
+            }
+          }, delay);
+          return () => clearTimeout(timer);
         }
+    }
 
-        setGameState(nextTurn(newState));
-      }, delay);
-      return () => clearTimeout(timer);
+    if (gameState.turnPhase === 'DEFENSE' && gameState.pendingAttack) {
+        const targetPlayer = gameState.players.find(p => p.id === gameState.pendingAttack!.targetId);
+        if (targetPlayer && !targetPlayer.isHuman) {
+             const delay = 1000;
+             const timer = setTimeout(() => {
+                 // AI now only tries to REPEL with matching attack type
+                 const incomingType = gameState.pendingAttack!.attackType;
+                 const repelCards = targetPlayer.hand.filter(c => c.type === incomingType);
+                 
+                 repelCards.sort((a,b) => (b.value || 0) - (a.value || 0));
+                 const cardsToUse = repelCards.slice(0, 2);
+                 setGameState(resolveAttack(gameState, cardsToUse, false));
+             }, delay);
+             return () => clearTimeout(timer);
+        }
     }
   }, [gameState, screen]);
 
-  // Animation Trigger
+  // Action Animation
   useEffect(() => {
       if (gameState?.lastAction) {
           const act = gameState.lastAction;
-          // @ts-ignore
-          const cardName = t.cards[act.cardId]?.name || '卡牌';
           const sourceName = gameState.players.find(p => p.id === act.sourceId)?.name;
-          const msg = `${sourceName} 使用了 ${cardName}!`;
+          const targetName = gameState.players.find(p => p.id === act.targetId)?.name;
           
-          setAnimationData({ msg, sourceId: act.sourceId, targetId: act.targetId });
+          let cardName = 'Unknown Card';
+          const played = act.cardsPlayed?.[0];
           
-          const timer = setTimeout(() => setAnimationData(null), 1500);
+          if (played) {
+              if (act.type === 'REPEL') {
+                  // @ts-ignore
+                  const elemName = ELEMENT_CONFIG[played.element || ElementType.NEUTRAL].name;
+                  cardName = `${elemName} 反擊`;
+              } else {
+                  cardName = played.name;
+              }
+          }
+
+          let type: 'attack'|'defense'|'repel'|'normal' = 'normal';
+          let msg = '';
+          let value = 0;
+          let comboName = act.comboName;
+
+          if (act.type === CardType.ATTACK || act.type === CardType.MAGIC_ATTACK) {
+              type = 'attack';
+              msg = act.cardsPlayed ? act.cardsPlayed.map(c => c.name).join(' + ') : t.attackExcl;
+              value = act.totalValue || 0;
+          } else if (act.type === 'REPEL') {
+              type = 'repel';
+              msg = '反擊！';
+              value = act.totalValue || 0;
+          } else {
+              msg = `${t.cardUsed} ${cardName}`;
+          }
+          setAnimationData({ type, value, msg, sourceName, targetName, cardName, comboName });
+          const timer = setTimeout(() => setAnimationData(null), 2500);
           return () => clearTimeout(timer);
       }
   }, [gameState?.lastAction]);
 
-
-  const handleStartGame = (name: string, nation: NationType, settings: GameSettings) => {
-    setGameState(createInitialState(nation, name, settings));
+  // --- Handlers ---
+  const handleStartGame = (players: RoomPlayer[], settings: GameSettings) => {
+    setGameState(createInitialState(players, settings));
     setScreen('game');
   };
-
+  
   const handleEndTurn = () => {
     if (!gameState) return;
     setGameState(nextTurn(gameState));
-    setSelectedCardId(null);
+    setSelectedCardIds([]);
+    setTargetId(null);
   };
 
-  const handlePlayCard = (card: Card) => {
-     if (!gameState) return;
-     
-     // Determine if card needs target based on generic effect type or card type
-     // Damage and Gold Steal always need targets
-     const isTargetEffect = ['damage', 'gold_steal'].includes(card.effectType || '');
-     const isMissile = card.type === CardType.MISSILE; 
-     
-     // Missile without target is random, with target is specific (if supported)
-     // Let's enforce targeting for damage/steal effects except if it's a random-only card (like stray_arrow, handled by engine if no target)
-     // For simplicity in UI, if it can take a target, we select.
-     
-     const needsTarget = isTargetEffect && !isMissile; // Missiles can be auto-random, but let's allow targeting for "Guided" logic? 
-     // Actually, let's keep it simple: Attack/Magic(Damage)/Contract(Steal) = Target. Missile = Auto Random (no target needed in UI usually, or optional).
-     // Updated Logic:
-     const explicitTargetTypes = [CardType.ATTACK, CardType.CONTRACT];
-     const explicitTargetEffects = ['damage', 'gold_steal'];
-     
-     // If it's Magic/Missile but has damage effect, we might want target. 
-     // But some magic is AOE or Random? Engine handles random if target missing for Missile.
-     // Let's require target for Attack and Contract(Steal). 
-     // For Magic(Damage), let's require target.
-     
-     const requiresTarget = (
-         (card.type === CardType.ATTACK) || 
-         (card.type === CardType.MAGIC && card.effectType === 'damage') ||
-         (card.type === CardType.CONTRACT && card.effectType === 'gold_steal') ||
-         (card.type === CardType.MISSILE && card.id.includes('guided')) // Special case for guided
-     );
-
-     if (requiresTarget) {
-         setSelectedCardId(selectedCardId === card.id ? null : card.id);
-     } else {
-         setGameState(executeCardEffect(gameState, card));
-     }
+  const handleSendMessage = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!chatInput.trim() || !gameState) return;
+      const player = gameState.players.find(p => p.isHuman);
+      const msg: ChatMessage = {
+          id: Date.now().toString(),
+          sender: player?.name || 'Unknown',
+          text: chatInput
+      };
+      setGameState({ ...gameState, chat: [...gameState.chat, msg] });
+      setChatInput('');
   };
 
-  const handleTargetClick = (targetId: string) => {
-      if (!gameState || !selectedCardId) return;
-      const card = gameState.players[gameState.currentPlayerIndex].hand.find(c => c.id === selectedCardId);
-      if (card) {
-          setGameState(executeCardEffect(gameState, card, targetId));
-          setSelectedCardId(null);
+  const toggleSelectCard = (card: Card) => {
+      const isDefensePhase = gameState?.turnPhase === 'DEFENSE';
+      
+      // Defense Phase: Strict Matching Logic
+      if (isDefensePhase) {
+          const incomingType = gameState?.pendingAttack?.attackType;
+          if (incomingType) {
+              // Physical Attack requires Physical OR Rune
+              if (incomingType === CardType.ATTACK) {
+                  if (card.type !== CardType.ATTACK && card.type !== CardType.RUNE) return;
+              } 
+              // Magic Attack requires Magic (no runes)
+              else if (incomingType === CardType.MAGIC_ATTACK) {
+                  if (card.type !== CardType.MAGIC_ATTACK) return;
+              }
+          }
+      }
+      
+      if (selectedCardIds.includes(card.id)) {
+          setSelectedCardIds(prev => prev.filter(id => id !== card.id));
+      } else {
+          // --- Stacking Rules Implementation ---
+          const humanPlayer = gameState!.players.find(p => p.isHuman)!;
+          const currentSelected = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
+          
+          let canSelect = false;
+
+          if (currentSelected.length === 0) {
+              // First card selection
+              if (card.type === CardType.RUNE) {
+                  alert(t.cantUseAlone); // Warn but maybe don't select? Or select and wait for weapon.
+                  // Allow selecting rune first, but execution will fail if no weapon
+                  canSelect = true; 
+              } else {
+                  canSelect = true;
+              }
+          } else {
+              const hasWeapon = currentSelected.some(c => c.type === CardType.ATTACK);
+              const hasMagic = currentSelected.some(c => c.type === CardType.MAGIC_ATTACK);
+              const runes = currentSelected.filter(c => c.type === CardType.RUNE);
+              
+              // 1. Magic Stacking: Only same element Magic
+              if (hasMagic) {
+                  if (card.type === CardType.MAGIC_ATTACK && card.element === currentSelected[0].element) {
+                      canSelect = true;
+                  }
+              }
+              // 2. Physical Stacking: Weapon + Runes
+              else {
+                  if (card.type === CardType.MAGIC_ATTACK) {
+                      // Cannot mix Magic with Physical/Runes
+                      canSelect = false;
+                  } else if (card.type === CardType.ATTACK) {
+                      // Already has weapon?
+                      if (hasWeapon) canSelect = false; // Only 1 weapon allowed
+                      else canSelect = true; // Adding weapon to existing runes
+                  } else if (card.type === CardType.RUNE) {
+                      // Adding Rune
+                      // Check Element Constraint: Must match existing elemental runes (if any)
+                      const existingEleRune = runes.find(r => r.element !== ElementType.NEUTRAL);
+                      if (existingEleRune && card.element !== ElementType.NEUTRAL && card.element !== existingEleRune.element) {
+                          canSelect = false;
+                      } 
+                      // Check Alignment Constraint: Must match existing alignment runes (if any)
+                      else if (runes.length > 0) {
+                          const existingAlignRune = runes.find(r => r.alignment !== undefined);
+                          if (existingAlignRune && card.alignment && card.alignment !== existingAlignRune.alignment) {
+                              canSelect = false;
+                          } else {
+                              canSelect = true;
+                          }
+                      } else {
+                          canSelect = true;
+                      }
+                  }
+              }
+          }
+
+          if (canSelect) {
+              setSelectedCardIds(prev => [...prev, card.id]);
+          }
       }
   };
 
-  // --- RENDER ---
+  const handleExecutePlay = () => {
+      if (!gameState || selectedCardIds.length === 0) return;
+      const humanPlayer = gameState.players.find(p => p.isHuman)!;
+      const selectedCards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
+      if (selectedCards.length === 0) return;
+
+      const types = selectedCards.map(c => c.type);
+      const hasAttack = types.includes(CardType.ATTACK);
+      const hasMagic = types.includes(CardType.MAGIC_ATTACK);
+      const isRuneOnly = selectedCards.every(c => c.type === CardType.RUNE);
+
+      if (gameState.turnPhase === 'DEFENSE') {
+           if (isRuneOnly) {
+              alert(t.cantUseAlone);
+              return;
+           }
+           if (hasAttack || hasMagic || (types.includes(CardType.RUNE) && hasAttack)) {
+             setGameState(resolveAttack(gameState, selectedCards, true));
+             setSelectedCardIds([]);
+             return;
+           }
+          return;
+      }
+
+      const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+
+      if (hasAttack || hasMagic) {
+          // Attack execution
+          if (!targetId) {
+             alert(t.selectTargetHint);
+             return;
+          }
+          setGameState(executeAttackAction(gameState, selectedCards, targetId));
+      } else if (isRuneOnly) {
+          alert(t.cantUseAlone);
+          return;
+      } else if (['heal', 'mana', 'full_restore_hp', 'buff_damage', 'equip_artifact'].includes(selectedCards[0].effectType || '') || selectedCards[0].type === CardType.HEAL || selectedCards[0].type === CardType.ARTIFACT) {
+          if (selectedCards.length > 1) { alert(t.notStackable); return; }
+          setGameState(executeCardEffect(gameState, selectedCards[0], currentPlayer.id));
+      } else if (selectedCards[0].type === CardType.RITUAL) {
+          setGameState(executeCardEffect(gameState, selectedCards[0]));
+      } else {
+          if (selectedCards.length > 1) { alert(t.notStackable); return; }
+          setGameState(executeCardEffect(gameState, selectedCards[0], targetId || undefined));
+      }
+      setSelectedCardIds([]);
+      setTargetId(null);
+  };
+
+  const handleSell = () => {
+      if (!gameState || selectedCardIds.length !== 1) return;
+      const humanPlayer = gameState.players.find(p => p.isHuman)!;
+      const card = humanPlayer.hand.find(c => c.id === selectedCardIds[0]);
+      if (card) {
+          setGameState(sellCard(gameState, card));
+          setSelectedCardIds([]);
+      }
+  };
+
+  const handleBuy = (card: Card) => {
+      if (!gameState) return;
+      setGameState(buyCard(gameState, card));
+  };
+
+  const handleSkipDefense = () => {
+      if (!gameState) return;
+      setGameState(resolveAttack(gameState, [], false));
+  };
+
+  const handleLeaveGame = () => {
+      setShowQuitModal(true);
+  };
+
+  const confirmLeaveGame = () => {
+      setGameState(null); 
+      setScreen('start');
+      setShowQuitModal(false);
+  };
+
+  const handleCardMouseEnter = (card: Card, e: React.MouseEvent) => {
+      setHoveredCard({ card, x: e.clientX, y: e.clientY });
+  };
+  
+  const handleCardMouseLeave = () => {
+      setHoveredCard(null);
+  };
+
+  // --- Render Sub-Components ---
 
   if (screen === 'start') {
-      return <StartScreen onHost={() => setScreen('lobby')} onGallery={() => setScreen('gallery')} lang={lang} setLang={setLang} />;
+      return (
+        <div className="relative">
+            <StartScreen 
+                onHost={() => setScreen('lobby')} 
+                onGallery={() => setScreen('gallery')} 
+                onGuide={() => { setPreviousScreen('start'); setScreen('guide'); }} 
+                onSim={() => setScreen('simulation')}
+                lang={lang} 
+                setLang={setLang} 
+            />
+        </div>
+      );
   }
 
-  if (screen === 'gallery') {
-      return <CardGallery lang={lang} onBack={() => setScreen('start')} />;
-  }
-
-  if (screen === 'lobby') {
-      return <LobbyScreen lang={lang} onStart={handleStartGame} onBack={() => setScreen('start')} />;
-  }
-
+  if (screen === 'gallery') return <CardGallery lang={lang} onBack={() => setScreen('start')} />;
+  if (screen === 'guide') return <GameGuide onBack={() => setScreen(previousScreen)} />;
+  if (screen === 'simulation') return <SimulationScreen onBack={() => setScreen('start')} />;
+  if (screen === 'lobby') return <LobbyScreen lang={lang} onStart={handleStartGame} onBack={() => setScreen('start')} />;
   if (!gameState) return null; 
 
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
   const humanPlayer = gameState.players.find(p => p.isHuman)!;
-  const isHumanTurn = currentPlayer.id === humanPlayer.id;
+  const isHumanTurn = currentPlayer.id === humanPlayer.id && gameState.turnPhase === 'ACTION';
+  const isDefensePhase = gameState.turnPhase === 'DEFENSE';
+  const amIBeingAttacked = isDefensePhase && gameState.pendingAttack?.targetId === humanPlayer.id;
+  const canPlay = selectedCardIds.length > 0;
+  const selectedCards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
+  const totalCost = selectedCards.reduce((sum, c) => sum + c.manaCost, 0);
+  const totalHpCost = selectedCards.reduce((sum, c) => sum + (c.hpCost || 0), 0) + (preview?.hpCost || 0);
+  const isRuneOnly = selectedCards.length > 0 && selectedCards.every(c => c.type === CardType.RUNE);
+  
+  const canAffordMana = humanPlayer.mana >= totalCost;
+  const canAffordHp = humanPlayer.hp > totalHpCost;
+  const canAfford = canAffordMana && canAffordHp;
+
+  // Calculate incomes
+  const landIncome = humanPlayer.lands.reduce((sum, l) => sum + (l.value || 0), 0) * gameState.settings.incomeMultiplier;
+  let totalIncome = humanPlayer.income + landIncome;
+  if (gameState.currentEvent?.globalModifier?.incomeMultiplier !== undefined) totalIncome *= gameState.currentEvent.globalModifier.incomeMultiplier;
+  
+  // @ts-ignore
+  const EventIcon = gameState.currentEvent ? Icons[gameState.currentEvent.icon] || Icons.Zap : Icons.Zap;
 
   return (
-    <div className="h-screen w-screen bg-slate-900 text-slate-200 overflow-hidden flex flex-col font-sans">
+    <div className="h-[100dvh] w-screen bg-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30 overflow-hidden flex flex-col lg:grid lg:grid-cols-[280px_1fr]">
       
-      {/* Top Bar: Opponents */}
-      <div className="h-28 bg-slate-950 border-b border-slate-800 flex items-center justify-center gap-2 px-4 overflow-x-auto">
-        {gameState.players.filter(p => !p.isHuman).map(bot => (
-            <div 
-                key={bot.id}
-                onClick={() => selectedCardId && isHumanTurn && handleTargetClick(bot.id)}
-                className={`
-                    relative w-48 lg:w-64 h-24 rounded-lg border-2 p-2 transition-all shrink-0
-                    ${bot.isDead ? 'opacity-40 grayscale border-slate-800' : 
-                      selectedCardId && isHumanTurn ? 'border-red-500 cursor-crosshair bg-red-900/10 hover:bg-red-900/30' : 
-                      gameState.currentPlayerIndex === gameState.players.indexOf(bot) ? 'border-yellow-400 bg-slate-800 scale-105 shadow-yellow-500/20 shadow-lg' : 'border-slate-700 bg-slate-900'}
-                    ${animationData?.targetId === bot.id ? 'animate-pulse ring-4 ring-red-500' : ''}
-                `}
-            >
-                <div className="flex justify-between items-start">
-                    <span className={`font-bold text-sm truncate ${NATION_CONFIG[bot.nation].color}`}>
-                        {/* @ts-ignore */}
-                        {t.nations[bot.nation].name}
-                    </span>
-                    <span className="text-xs text-slate-500">{bot.name}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-1 mt-2 text-xs">
-                    <div className="flex items-center gap-1 text-red-400"><Heart size={12}/> {bot.hp}</div>
-                    <div className="flex items-center gap-1 text-blue-400"><Zap size={12}/> {bot.mana}</div>
-                    <div className="flex items-center gap-1 text-yellow-400"><Coins size={12}/> {bot.gold}</div>
-                    <div className="flex items-center gap-1 text-emerald-400"><Building2 size={12}/> {bot.lands.length}</div>
-                </div>
-                {/* Visual Projectile Impact */}
-                {animationData?.targetId === bot.id && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                         <div className="text-4xl animate-ping">💥</div>
-                    </div>
-                )}
-                {bot.isDead && <div className="absolute inset-0 flex items-center justify-center font-bold text-red-600 bg-black/50 rounded-lg cinzel">{t.defeated}</div>}
+      {/* Debug Console Overlay */}
+      {showDebug && <DebugConsole gameState={gameState} setGameState={setGameState} onClose={() => setShowDebug(false)} />}
+
+      {/* 1. SIDEBAR (Log/Chat) - Desktop Fixed, Mobile Drawer */}
+      <div className={`
+          fixed inset-0 z-50 bg-black/80 lg:hidden transition-opacity duration-300 
+          ${showSidebar ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
+      `} onClick={() => setShowSidebar(false)}></div>
+
+      <div className={`
+          fixed inset-y-0 left-0 z-[60] w-[280px] bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0 lg:z-10 h-full
+          ${showSidebar ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+            <div className="flex border-b border-slate-800 shrink-0">
+                <button onClick={() => setActiveTab('log')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'log' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}><History size={14} className="inline mr-2"/> {t.logs}</button>
+                <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'chat' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}><MessageSquare size={14} className="inline mr-2"/> Chat</button>
             </div>
-        ))}
+            {activeTab === 'log' ? (
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide min-h-0">
+                    {gameState.gameLog.map(log => (
+                        <div key={log.id} className={`p-2.5 rounded-lg text-xs leading-relaxed border border-slate-800 ${log.type === 'combat' ? 'bg-red-950/20 text-red-200 border-red-900/30' : 'bg-slate-800/30 text-slate-400'}`}>
+                            <div className="mb-1 opacity-40 text-[10px]">{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</div>
+                            {log.message}
+                        </div>
+                    ))}
+                    <div ref={logEndRef} />
+                </div>
+            ) : (
+                <div className="flex-1 flex flex-col min-h-0">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">{gameState.chat.map(msg => <div key={msg.id} className="text-xs break-words"><span className="font-bold text-indigo-400">{msg.sender}:</span> <span className="text-slate-300">{msg.text}</span></div>)}<div ref={chatEndRef} /></div>
+                    <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 bg-slate-950 flex gap-2"><input value={chatInput} onChange={e => setChatInput(e.target.value)} className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs outline-none text-slate-200 focus:border-slate-600" placeholder={t.chatPlaceholder}/><button type="submit" className="bg-indigo-600 p-1.5 rounded text-white hover:bg-indigo-500"><Send size={14}/></button></form>
+                </div>
+            )}
       </div>
 
-      {/* Main Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left: Game Log */}
-        <div className="hidden md:block w-64 bg-slate-900/90 border-r border-slate-800 p-4 overflow-y-auto scrollbar-hide text-sm space-y-2">
-            <h3 className="text-slate-500 font-bold uppercase text-xs flex items-center gap-2 mb-4">
-                <History size={14}/> {t.logs}
-            </h3>
-            {gameState.gameLog.map(log => (
-                <div key={log.id} className={`p-2 rounded border-l-2 text-xs ${
-                    log.type === 'combat' ? 'border-red-500 bg-red-900/10' :
-                    log.type === 'event' ? 'border-purple-500 bg-purple-900/10 font-bold text-purple-200' :
-                    log.type === 'economy' ? 'border-yellow-500 bg-yellow-900/10' :
-                    'border-slate-500 bg-slate-800/50'
-                }`}>
-                    {log.message}
-                </div>
-            ))}
-        </div>
+      {/* 2. MAIN AREA: Game Board */}
+      <div className="flex-1 h-full flex flex-col relative bg-slate-950 overflow-hidden">
+          
+          {/* Top Status Bar */}
+          <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 z-50 shrink-0">
+              <div className="flex items-center gap-4">
+                  <button onClick={() => setShowSidebar(true)} className="lg:hidden p-2 text-slate-400 hover:text-white"><Menu size={20}/></button>
+                  <div className="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Turn</span>
+                      <span className="font-mono font-bold text-white text-lg">{gameState.turn}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2">
+                          <span className={`font-bold text-sm truncate max-w-[80px] sm:max-w-none ${currentPlayer.id === humanPlayer.id ? 'text-green-400' : 'text-slate-300'}`}>
+                              {currentPlayer.name}
+                          </span>
+                      </div>
+                  </div>
+              </div>
+              
+              {gameState.currentEvent && (
+                  <div className={`hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg animate-fade-in ${gameState.currentEvent.type === 'DISASTER' ? 'bg-red-900/80 text-red-100 border border-red-700' : 'bg-yellow-900/80 text-yellow-100 border border-yellow-700'}`}>
+                      <EventIcon size={16} /> {gameState.currentEvent.name}
+                  </div>
+              )}
 
-        {/* Center: Battlefield */}
-        <div className="flex-1 relative bg-[url('https://images.unsplash.com/photo-1634978836611-38290e2b95b8?q=80&w=2670&auto=format&fit=crop')] bg-cover bg-center">
-            <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px]"></div>
-            
-            {/* Animation Overlay */}
-            {animationData && (
-                <div className="absolute top-1/4 left-1/2 -translate-x-1/2 z-40 bg-black/60 px-6 py-3 rounded-full border border-white/20 animate-bounce">
-                    <div className="flex items-center gap-3 text-xl font-bold text-white shadow-black drop-shadow-md">
-                        <Swords className="text-red-500"/>
-                        {animationData.msg}
-                    </div>
-                </div>
-            )}
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setShowDebug(true)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-green-400 transition-colors" title="Debug Console (~)"><Terminal size={16}/></button>
+                  <button onClick={() => setShowGuideModal(true)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="指南"><BookOpen size={20}/></button>
+                  <div className="h-6 w-px bg-slate-700 mx-2 hidden sm:block"></div>
+                  <button onClick={handleLeaveGame} className="p-2 bg-red-900/10 hover:bg-red-900/40 rounded-lg text-red-400 hover:text-red-300 transition-colors border border-red-900/20" title="離開"><Power size={20}/></button>
+              </div>
+          </div>
 
-            {/* Event Overlay */}
-            {gameState.eventMessage && (
-                <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white px-8 py-4 rounded-xl shadow-2xl animate-bounce">
-                    <h2 className="text-2xl font-bold cinzel flex items-center gap-2"><Zap /> EVENT</h2>
-                    <p>{gameState.eventMessage}</p>
-                </div>
-            )}
+          {/* Top Notification Overlay */}
+          {topNotification && (
+              <div className={`absolute top-14 left-0 w-full z-[90] p-2 flex items-center justify-center shadow-lg transition-transform animate-slide-down ${topNotification.type === 'event' ? 'bg-indigo-600' : topNotification.type === 'artifact' ? 'bg-amber-600' : 'bg-slate-700'}`}>
+                  <BellRing size={20} className="mr-2 text-white"/>
+                  <span className="font-bold text-white tracking-wide">{topNotification.message}</span>
+              </div>
+          )}
 
-            {/* Game Over */}
-            {gameState.winnerId && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
-                     <div className="text-center space-y-6 animate-fade-in-up">
-                         <Crown size={64} className="mx-auto text-yellow-400 mb-4" />
-                         <h1 className="text-5xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-amber-600 cinzel">
-                             {gameState.players.find(p => p.id === gameState.winnerId)?.name} {t.wins}
-                         </h1>
-                         <button onClick={() => setScreen('start')} className="px-8 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-white font-bold">{t.playAgain}</button>
-                     </div>
-                </div>
-            )}
+          {/* Middle: Arena (Opponents) */}
+          <div className="flex-1 relative flex flex-col items-center p-4 bg-slate-950 overflow-y-auto overflow-x-hidden min-h-0">
+                <div className="absolute inset-0 opacity-30 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/30 via-slate-950 to-black pointer-events-none fixed"></div>
 
-            {/* Human Lands */}
-            <div className="absolute bottom-4 left-4 right-4 flex justify-center">
-                 <div className="text-center w-full max-w-2xl">
-                    <h3 className="text-xs uppercase tracking-widest text-slate-400 mb-2">{t.lands}</h3>
-                    <div className="flex justify-center flex-wrap gap-2 min-h-[80px] border-2 border-dashed border-slate-700 rounded-xl p-2 bg-slate-900/60">
-                        {humanPlayer.lands.length === 0 && <span className="text-slate-500 my-auto text-xs">{t.buildHere}</span>}
-                        {humanPlayer.lands.map((card, i) => (
-                            <CardComponent key={i} card={card} compact showCost={false} lang={lang} />
+                <div className="w-full flex-1 flex flex-col justify-center min-h-min">
+                    <div className="w-full flex flex-nowrap lg:flex-wrap gap-4 items-center justify-start lg:justify-center z-10 overflow-x-auto lg:overflow-visible py-4 px-2 snap-x">
+                        {gameState.players.filter(p => p.id !== humanPlayer.id).map(opp => (
+                            <div key={opp.id} onClick={() => canPlay && setTargetId(opp.id)} className={`relative group w-36 sm:w-52 shrink-0 bg-slate-900 border transition-all cursor-pointer rounded-2xl p-2 sm:p-4 flex flex-col gap-2 shadow-xl snap-center ${targetId === opp.id ? 'border-red-500 ring-2 ring-red-500/50 bg-red-950/10' : 'border-slate-700 hover:border-slate-500 hover:-translate-y-1'}`}>
+                                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                                    <div className="font-bold text-xs sm:text-sm text-slate-200 truncate max-w-[80px] sm:max-w-[100px]" title={opp.name}>{opp.name}</div>
+                                    <div className="flex gap-1 items-center">
+                                        {/* Soul Mini Indicator */}
+                                        <div className={`w-3 h-3 rounded-full ${opp.soul > 0 ? 'bg-yellow-400' : opp.soul < 0 ? 'bg-purple-500' : 'bg-slate-600'}`}></div>
+                                        {/* Element Mark */}
+                                        {opp.elementMark && (
+                                            <div className="bg-black rounded-full p-0.5 border border-white/20">
+                                                {/* @ts-ignore */}
+                                                {ELEMENT_CONFIG[opp.elementMark] && React.createElement(ELEMENT_CONFIG[opp.elementMark].icon, {size: 10, className: ELEMENT_CONFIG[opp.elementMark].color})}
+                                            </div>
+                                        )}
+                                        {opp.isStunned && <Zap size={12} className="text-yellow-500 fill-yellow-500 animate-pulse"/>}
+                                        {opp.isDead && <Skull size={12} className="text-slate-500"/>}
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-[8px] sm:text-[10px] text-slate-400 font-bold"><span>HP</span> <span>{opp.hp}/{opp.maxHp}</span></div>
+                                    <div className="w-full bg-slate-800 h-1.5 sm:h-2 rounded-full overflow-hidden"><div className="bg-red-500 h-full transition-all shadow-[0_0_10px_rgba(239,68,68,0.5)]" style={{ width: `${Math.min(100, (opp.hp/opp.maxHp)*100)}%` }}></div></div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-[8px] sm:text-[10px] text-slate-400 bg-black/20 p-2 rounded-lg">
+                                    <div className="flex items-center gap-1"><Zap size={10} className="text-blue-400"/> {opp.mana}</div>
+                                    <div className="flex items-center gap-1"><Coins size={10} className="text-yellow-400"/> {opp.gold}</div>
+                                </div>
+
+                                <div className="flex flex-wrap gap-1 justify-center pt-1">
+                                    {[...Array(MAX_LAND_SIZE)].map((_, i) => (
+                                        <div key={i} className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-sm overflow-hidden bg-slate-800">
+                                            {opp.lands[i] && (
+                                                <div 
+                                                    className="w-full h-full bg-emerald-500 cursor-help" 
+                                                    onMouseEnter={(e) => handleCardMouseEnter(opp.lands[i], e)} 
+                                                    onMouseLeave={handleCardMouseLeave}
+                                                ></div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                {targetId === opp.id && <div className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full p-1.5 shadow-lg animate-pulse z-20 border-2 border-slate-900"><Crosshair size={16}/></div>}
+                            </div>
                         ))}
                     </div>
-                 </div>
-            </div>
-        </div>
-      </div>
-
-      {/* Bottom: Player Dashboard */}
-      <div className="h-64 bg-slate-950 border-t border-slate-800 grid grid-cols-[200px_1fr_140px] md:grid-cols-[280px_1fr_200px] gap-2 md:gap-4 p-2 md:p-4">
-         {/* Stats Panel */}
-         <div className="bg-slate-900 rounded-xl p-3 border border-slate-800 flex flex-col justify-between text-xs md:text-sm">
-            <div className="flex items-center gap-2 mb-1">
-                 <div className={`p-1.5 rounded ${NATION_CONFIG[humanPlayer.nation].bgColor}`}>
-                    <Crown size={16} className={NATION_CONFIG[humanPlayer.nation].color} />
-                 </div>
-                 <div className="overflow-hidden">
-                     <div className="font-bold truncate">{humanPlayer.name}</div>
-                     {/* @ts-ignore */}
-                     <div className="text-[10px] text-slate-500">{t.nations[humanPlayer.nation].name}</div>
-                 </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center gap-1 text-red-400"><Heart size={14}/> {humanPlayer.hp}/{humanPlayer.maxHp}</div>
-                <div className="flex items-center gap-1 text-blue-400"><Zap size={14}/> {humanPlayer.mana}/{humanPlayer.maxMana}</div>
-                <div className="flex items-center gap-1 text-yellow-400"><Coins size={14}/> {humanPlayer.gold}</div>
-                <div className="flex items-center gap-1 text-emerald-400"><TrendingUp size={14}/> +{humanPlayer.income}</div>
-                <div className="col-span-2 flex items-center gap-1 text-slate-400 border-t border-slate-800 pt-1 mt-1">
-                    <Landmark size={14} /> {humanPlayer.bankDeposit} <span className="text-[10px] ml-auto text-emerald-500">+10%</span>
                 </div>
-            </div>
-         </div>
 
-         {/* Hand */}
-         <div className="relative bg-slate-900/50 rounded-xl border border-slate-800 p-2 flex items-center justify-start gap-2 overflow-x-auto">
-             {humanPlayer.isDead ? (
-                 <div className="w-full text-center text-red-500 font-bold cinzel text-xl my-auto">{t.defeated}</div>
-             ) : (
-                humanPlayer.hand.map((card) => {
-                    const isTypePlayed = gameState.playedCardTypesThisTurn.includes(card.type);
-                    const canAffordMana = humanPlayer.mana >= card.manaCost;
-                    const limitReached = gameState.playedCardTypesThisTurn.length >= 2;
-                    const isPlayable = isHumanTurn && !isTypePlayed && canAffordMana && !limitReached;
-                    
-                    return (
-                        <div key={card.id} className={`shrink-0 transform transition-all ${selectedCardId === card.id ? '-translate-y-4 z-10' : 'hover:-translate-y-2'}`}>
-                            <CardComponent 
-                                card={card} 
-                                lang={lang}
-                                onClick={() => isPlayable && handlePlayCard(card)}
-                                disabled={!isPlayable}
-                            />
-                            {selectedCardId === card.id && (
-                                <div className="absolute -top-8 left-0 right-0 text-center text-[10px] bg-black text-white px-1 py-1 rounded animate-bounce">
-                                    {t.selectTarget}
+                {/* Animation Overlay */}
+                {animationData && (
+                    <div className="absolute z-30 animate-fade-in flex flex-col items-center gap-2 pointer-events-none inset-0 justify-center bg-black/40 backdrop-blur-[2px]">
+                         <div className={`px-12 py-8 rounded-3xl text-2xl font-black shadow-2xl border-4 backdrop-blur-md flex flex-col items-center gap-4 relative overflow-hidden ${animationData.type === 'attack' ? 'bg-red-900/90 border-red-500 text-white shadow-red-900/50' : animationData.type === 'defense' ? 'bg-blue-900/90 border-blue-500 text-white shadow-blue-900/50' : 'bg-slate-800/90 border-slate-500 text-white'}`}>
+                             {/* Combo Animation Background */}
+                             {animationData.comboName && (
+                                <div className={`absolute inset-0 opacity-30 animate-pulse ${animationData.comboName.includes('湮滅') ? 'bg-purple-600' : animationData.comboName.includes('過載') ? 'bg-blue-600' : 'bg-yellow-600'}`}></div>
+                             )}
+
+                             {animationData.type === 'attack' && <Sword size={56} className="mb-2 relative z-10"/>}
+                             {animationData.type === 'defense' && <Shield size={56} className="mb-2 relative z-10"/>}
+                             
+                             <div className="text-sm font-bold opacity-80 uppercase tracking-[0.2em] relative z-10">{animationData.sourceName}</div>
+                             
+                             <div className="flex flex-col items-center relative z-10">
+                                 <div className="text-3xl md:text-5xl font-black leading-none drop-shadow-xl my-2 text-center whitespace-nowrap px-4">
+                                     {animationData.cardName}
+                                 </div>
+                                 {animationData.comboName && (
+                                     <div className="text-2xl font-bold text-yellow-300 animate-bounce mt-2 uppercase tracking-widest drop-shadow-[0_0_10px_rgba(253,224,71,0.8)]">
+                                         ✦ {animationData.comboName} ✦
+                                     </div>
+                                 )}
+                                 {animationData.value > 0 && (
+                                     <div className="flex items-center gap-2 text-4xl font-mono mt-2 text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)]">
+                                         <span className="text-xl opacity-60 font-bold">POWER</span>
+                                         {animationData.value}
+                                     </div>
+                                 )}
+                             </div>
+
+                             <div className="text-base font-normal opacity-70 mt-2 bg-black/30 px-4 py-1 rounded-full border border-white/10 relative z-10">
+                                 {animationData.msg}
+                             </div>
+                         </div>
+                    </div>
+                )}
+
+                {/* Turn Reminder */}
+                {isHumanTurn && !amIBeingAttacked && (
+                    <div className="absolute bottom-4 z-10 pointer-events-none w-full flex justify-center">
+                        <div className="bg-green-600/80 backdrop-blur-sm text-white px-6 py-2 rounded-full font-bold shadow-[0_0_20px_rgba(22,163,74,0.5)] border border-green-400 text-sm md:text-base animate-pulse">
+                            你的回合 - 請出牌或結束
+                        </div>
+                    </div>
+                )}
+                
+                {(amIBeingAttacked) && (
+                    <div className="absolute z-20 bg-slate-950/80 backdrop-blur-sm p-1 rounded-3xl shadow-2xl animate-fade-in border border-slate-700 bottom-8">
+                        <div className={`w-80 md:w-96 rounded-2xl p-4 md:p-6 text-center border-2 ${amIBeingAttacked ? 'bg-red-950/90 border-red-500' : 'bg-orange-950/90 border-orange-500'}`}>
+                            <div className="mb-4 flex justify-center">
+                                <ShieldAlert size={48} className="text-red-500 animate-pulse"/>
+                            </div>
+                            <h2 className="text-xl md:text-2xl font-black text-white mb-1">{t.enemyDamage}</h2>
+                            <div className="text-4xl md:text-5xl font-black text-white mb-4 font-mono">
+                                {gameState.pendingAttack?.damage}
+                            </div>
+                            
+                            {amIBeingAttacked && (
+                                <div className="mb-4 text-sm text-red-300 bg-red-900/30 p-2 rounded-lg border border-red-500/20">
+                                    {gameState.pendingAttack?.attackType === CardType.ATTACK ? 
+                                        "敵方為【物理攻擊】，請使用【物理攻擊卡】反擊" : 
+                                        "敵方為【魔法攻擊】，請使用【魔法攻擊卡】反擊"}
+                                </div>
+                            )}
+
+                            <div className="space-y-2">
+                                <button onClick={handleExecutePlay} disabled={selectedCardIds.length === 0} className={`w-full py-3 font-bold rounded-xl shadow-lg transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${amIBeingAttacked ? 'bg-orange-600 hover:bg-orange-500' : 'bg-cyan-600 hover:bg-cyan-500'} text-white`}>
+                                    '反擊 (Counter)'
+                                </button>
+                                <button onClick={handleSkipDefense} className="w-full py-3 bg-white/10 hover:bg-white/20 text-white/70 font-bold rounded-xl text-sm">
+                                    {t.takeDamage}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+          </div>
+
+          {/* Bottom Area: Player Dashboard & Hand */}
+          <div className="h-auto min-h-[160px] md:min-h-[300px] bg-slate-900 border-t border-slate-800 flex flex-col z-40 shadow-[0_-20px_60px_rgba(0,0,0,0.5)] shrink-0">
+              
+              {/* Player Dashboard Stats */}
+              <div className="bg-slate-900/50 flex flex-col md:flex-row items-start md:items-center px-4 py-2 gap-4 border-b border-slate-800">
+                    <div className="flex w-full md:w-auto items-center gap-4">
+                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center border-2 shadow-lg ${NATION_CONFIG[humanPlayer.nation].bgColor} ${NATION_CONFIG[humanPlayer.nation].borderColor} relative shrink-0`}>
+                            <Crown size={20} className={NATION_CONFIG[humanPlayer.nation].color} />
+                            
+                            {/* Player Element Mark */}
+                            {humanPlayer.elementMark && (
+                                <div className="absolute -top-2 -right-2 bg-black rounded-full p-1 border-2 border-white shadow-lg animate-pulse" title="元素印記">
+                                    {/* @ts-ignore */}
+                                    {ELEMENT_CONFIG[humanPlayer.elementMark] && React.createElement(ELEMENT_CONFIG[humanPlayer.elementMark].icon, {size: 12, className: ELEMENT_CONFIG[humanPlayer.elementMark].color})}
                                 </div>
                             )}
                         </div>
-                    );
-                })
-             )}
-         </div>
+                        
+                        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-1">
+                            <div className="space-y-0.5">
+                                <div className="flex justify-between text-[10px] font-bold text-slate-400">HP <span className="text-white">{humanPlayer.hp}/{humanPlayer.maxHp}</span></div>
+                                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden w-24 md:w-32"><div className="h-full bg-red-500 transition-all" style={{ width: `${Math.min(100, (humanPlayer.hp/humanPlayer.maxHp)*100)}%` }}></div></div>
+                            </div>
+                            <div className="space-y-0.5">
+                                <div className="flex justify-between text-[10px] font-bold text-slate-400">Mana <span className="text-white">{humanPlayer.mana}/{humanPlayer.maxMana}</span></div>
+                                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden w-24 md:w-32"><div className="h-full bg-blue-500 transition-all" style={{ width: `${Math.min(100, (humanPlayer.mana/humanPlayer.maxMana)*100)}%` }}></div></div>
+                            </div>
+                        </div>
+                    </div>
 
-         {/* Controls */}
-         <div className="flex flex-col gap-2">
-            <button 
-                onClick={() => handleEndTurn()}
-                disabled={!isHumanTurn}
-                className={`flex-1 rounded-xl font-bold text-lg md:text-xl flex items-center justify-center gap-2 transition-all ${!isHumanTurn ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/50'}`}
-            >
-                {isHumanTurn ? <>{t.endTurn}</> : <><Lock size={16}/> {t.wait}</>}
-            </button>
-            <div className="grid grid-cols-2 gap-2 h-1/2">
-                <button 
-                    onClick={() => setShowShop(true)}
-                    disabled={!isHumanTurn}
-                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg flex flex-col items-center justify-center text-xs font-bold"
-                >
-                    <ShoppingBag size={20} className="mb-1"/> {t.shop}
-                </button>
-                <button 
-                     onClick={() => setShowBank(true)}
-                     disabled={!isHumanTurn}
-                     className="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg flex flex-col items-center justify-center text-xs font-bold"
-                >
-                    <Landmark size={20} className="mb-1"/> {t.bank}
-                </button>
-            </div>
-         </div>
+                    {/* SOUL METER */}
+                    <div className="flex-1 flex flex-col items-center">
+                        <div className="flex justify-between w-full max-w-[200px] text-[9px] font-bold uppercase mb-1">
+                            <span className="text-purple-400">Darkness</span>
+                            <span className="text-slate-500">Soul</span>
+                            <span className="text-yellow-400">Light</span>
+                        </div>
+                        <div className="relative w-full max-w-[200px] h-2 bg-slate-800 rounded-full overflow-hidden flex">
+                            <div className="flex-1 bg-gradient-to-l from-slate-800 to-purple-600 opacity-50"></div>
+                            <div className="flex-1 bg-gradient-to-r from-slate-800 to-yellow-500 opacity-50"></div>
+                            
+                            {/* Indicator */}
+                            <div 
+                                className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_10px_white] transition-all duration-500"
+                                style={{ left: `${((humanPlayer.soul + 3) / 6) * 100}%` }}
+                            ></div>
+                        </div>
+                        <div className="text-[10px] font-mono mt-1 text-slate-400">
+                            {humanPlayer.soul === 3 ? <span className="text-yellow-400 font-bold animate-pulse">LIGHT STATE (+3)</span> : humanPlayer.soul === -3 ? <span className="text-purple-400 font-bold animate-pulse">DARK STATE (-3)</span> : `Level ${humanPlayer.soul}`}
+                        </div>
+                    </div>
+
+                    {/* Display Own Element Mark */}
+                    <div className="flex items-center gap-2 bg-slate-800/50 p-1.5 rounded-lg border border-slate-700">
+                        {humanPlayer.elementMark ? (
+                            <div className="flex items-center gap-2">
+                                <div className="text-[10px] text-slate-400 font-bold uppercase">Mark</div>
+                                {/* @ts-ignore */}
+                                <div className={`flex items-center gap-1 text-xs font-bold ${ELEMENT_CONFIG[humanPlayer.elementMark].color}`}>
+                                    {/* @ts-ignore */}
+                                    {React.createElement(ELEMENT_CONFIG[humanPlayer.elementMark].icon, {size: 14})}
+                                    {/* @ts-ignore */}
+                                    {ELEMENT_CONFIG[humanPlayer.elementMark].name}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-[10px] text-slate-600 font-bold px-2">NO MARK</div>
+                        )}
+                    </div>
+
+                    <div className="flex w-full md:w-auto items-center justify-between gap-4">
+                        <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded-lg border border-white/5">
+                            <div className="flex flex-col items-center min-w-[40px]">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase">Gold</span>
+                                <div className="flex items-center gap-1 text-yellow-400 font-bold text-xs"><Coins size={12}/> {humanPlayer.gold}</div>
+                            </div>
+                            <div className="h-6 w-px bg-white/10"></div>
+                            <div className="flex flex-col items-center min-w-[40px]">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase">Income</span>
+                                <div className="flex items-center gap-1 text-emerald-400 font-bold text-xs"><TrendingUp size={12}/> +{totalIncome}</div>
+                            </div>
+                        </div>
+                    </div>
+              </div>
+
+              {/* NEW: Artifacts & Lands Bar */}
+              <div className="px-4 py-2 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs overflow-x-auto scrollbar-hide">
+                  <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/50">
+                          <span className="text-emerald-500 font-bold flex items-center gap-1"><Factory size={10}/> Lands ({humanPlayer.lands.length}/{MAX_LAND_SIZE})</span>
+                          <div className="flex gap-1">
+                              {humanPlayer.lands.map((l, i) => (
+                                  <div key={i} className="w-4 h-4 bg-emerald-600 rounded-sm shadow border border-emerald-400 flex items-center justify-center cursor-help" onMouseEnter={(e) => handleCardMouseEnter(l, e)} onMouseLeave={handleCardMouseLeave}>
+                                      <Factory size={8} className="text-white"/>
+                                  </div>
+                              ))}
+                              {[...Array(Math.max(0, MAX_LAND_SIZE - humanPlayer.lands.length))].map((_, i) => (
+                                  <div key={`empty-land-${i}`} className="w-4 h-4 bg-slate-800 rounded-sm border border-slate-700/50"></div>
+                              ))}
+                          </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 bg-amber-900/20 px-2 py-1 rounded border border-amber-900/50">
+                          <span className="text-amber-500 font-bold flex items-center gap-1"><Anchor size={10}/> Artifacts ({humanPlayer.artifacts.length}/{MAX_ARTIFACT_SIZE})</span>
+                          <div className="flex gap-1">
+                              {humanPlayer.artifacts.map((a, i) => (
+                                  <div key={i} className="w-4 h-4 bg-amber-600 rounded-sm shadow border border-amber-400 flex items-center justify-center cursor-help" onMouseEnter={(e) => handleCardMouseEnter(a, e)} onMouseLeave={handleCardMouseLeave}>
+                                      <Gem size={8} className="text-white"/>
+                                  </div>
+                              ))}
+                              {[...Array(Math.max(0, MAX_ARTIFACT_SIZE - humanPlayer.artifacts.length))].map((_, i) => (
+                                  <div key={`empty-art-${i}`} className="w-4 h-4 bg-slate-800 rounded-sm border border-slate-700/50"></div>
+                              ))}
+                          </div>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Hand Controls Bar */}
+              <div className="h-12 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 shrink-0 overflow-x-auto scrollbar-hide">
+                  <div className="flex items-center gap-2">
+                      <button onClick={() => setShowShop(true)} className="flex items-center gap-1 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 font-bold px-3 py-1.5 rounded-lg transition-colors border border-indigo-500/30 text-xs whitespace-nowrap">
+                          <ShoppingBag size={14}/> {t.shop}
+                      </button>
+                      {isHumanTurn && selectedCardIds.length === 1 && (
+                          <button onClick={handleSell} className="flex items-center gap-1 bg-yellow-900/20 hover:bg-yellow-900/40 text-yellow-500 font-bold px-3 py-1.5 rounded-lg transition-colors border border-yellow-700/30 text-xs whitespace-nowrap">
+                              <XCircle size={14}/> {t.sell} <span className="text-[10px] bg-black/40 px-1 py-0.5 rounded ml-1">+{Math.floor((humanPlayer.hand.find(c => c.id === selectedCardIds[0])?.cost || 0) / 2)}G</span>
+                          </button>
+                      )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                      {/* Reaction Preview Bar */}
+                      {preview?.comboName && (
+                          <div className="flex items-center gap-2 bg-indigo-900/50 px-3 py-1 rounded-full border border-indigo-500/50 text-xs font-bold animate-pulse mr-2 whitespace-nowrap text-indigo-200">
+                              <Sparkles size={12} className="text-indigo-400"/>
+                              <span>觸發: {preview.comboName}</span>
+                              {preview.reactionBonusText && <span className="text-yellow-300 ml-1">({preview.reactionBonusText})</span>}
+                          </div>
+                      )}
+
+                      {preview && (
+                          <div className="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full border border-slate-700 text-xs font-bold animate-fade-in mr-2 whitespace-nowrap">
+                              {preview.damage > 0 && <div className="flex items-center gap-1 text-red-400"><Sword size={12}/> {preview.damage}</div>}
+                              
+                              {(preview.isAttack || preview.isDefensePhase) && (
+                                  <div className="flex items-center gap-2 px-2 border-l border-r border-slate-600">
+                                      {/* @ts-ignore */}
+                                      {ELEMENT_CONFIG[preview.element] && React.createElement(ELEMENT_CONFIG[preview.element].icon, {size: 14, className: ELEMENT_CONFIG[preview.element].color})}
+                                      {/* @ts-ignore */}
+                                      {preview.alignment && ALIGNMENT_CONFIG[preview.alignment] && React.createElement(ALIGNMENT_CONFIG[preview.alignment].icon, {size: 14, className: ALIGNMENT_CONFIG[preview.alignment].color})}
+                                  </div>
+                              )}
+
+                              {(preview.cost > 0 || preview.hpCost > 0) && <div className="flex items-center gap-1 text-slate-400 ml-2 pl-2 border-l border-slate-600">
+                                  <span className={`${!canAffordMana ? 'text-red-400 line-through opacity-50' : 'text-blue-300'}`}>{preview.cost}MP</span> 
+                                  <span className="text-red-300 ml-1">
+                                      {preview.hpCost > 0 ? `${preview.hpCost} HP` : ''}
+                                  </span>
+                              </div>}
+                          </div>
+                      )}
+                      
+                      {isHumanTurn && canPlay && (
+                          <button 
+                            onClick={handleExecutePlay} 
+                            disabled={!canAfford || (preview?.isAttack && !targetId && !isRuneOnly) || (isRuneOnly && !selectedCards.some(c=>c.type === CardType.ATTACK || c.type === CardType.MAGIC_ATTACK)) || humanPlayer.playsUsed >= humanPlayer.maxPlays}
+                            className={`px-4 py-1.5 rounded-lg font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2 text-xs whitespace-nowrap ${isRuneOnly || humanPlayer.playsUsed >= humanPlayer.maxPlays || !canAfford ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500 text-white shadow-green-900/20'}`}
+                          >
+                              {isRuneOnly ? t.cantUseAlone : 
+                               (preview?.comboName ? `${t.combo}!` : 
+                                t.playSelected)}
+                          </button>
+                      )}
+                      
+                      <button onClick={() => handleEndTurn()} disabled={!isHumanTurn} className={`px-4 py-1.5 rounded-lg font-bold border transition-colors text-xs whitespace-nowrap ${!isHumanTurn ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed' : 'bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white border-red-600'}`}>
+                          {isHumanTurn ? t.endTurn : t.wait}
+                      </button>
+                  </div>
+              </div>
+
+              {/* Scrollable Hand Area */}
+              <div className="flex-1 p-4 overflow-x-auto flex items-center gap-4 px-6 custom-scrollbar-gold bg-slate-950/50">
+                 {humanPlayer.isDead ? (
+                     <div className="w-full text-center text-red-500 font-bold cinzel text-3xl opacity-50">{t.defeated}</div>
+                 ) : (
+                    humanPlayer.hand.map((card) => {
+                        const isSelected = selectedCardIds.includes(card.id);
+                        const isActionPhase = isHumanTurn;
+                        const isReactionPhase = amIBeingAttacked;
+                        const canInteract = isActionPhase || isReactionPhase;
+                        
+                        let isDisabled = !canInteract;
+                        // Logic filtering for Reaction Phase
+                        if (amIBeingAttacked) {
+                             const incomingType = gameState.pendingAttack?.attackType;
+                             const isMatch = card.type === incomingType;
+                             const isRune = card.type === CardType.RUNE;
+                             if (!isMatch && !isRune) isDisabled = true;
+                        }
+
+                        return (
+                            <div key={card.id} className={`relative shrink-0 transition-all duration-300 transform origin-bottom md:scale-100 scale-90 ${isSelected ? '-translate-y-4 z-20 scale-105 md:scale-110' : 'hover:-translate-y-2 hover:scale-105'} ${isDisabled && !isSelected ? 'opacity-40 grayscale pointer-events-none scale-95' : ''}`}>
+                                <CardComponent 
+                                    card={card} 
+                                    lang={lang} 
+                                    onClick={() => !isDisabled && toggleSelectCard(card)} 
+                                    disabled={isDisabled} 
+                                    onMouseEnter={handleCardMouseEnter} 
+                                    onMouseLeave={handleCardMouseLeave} 
+                                    compact={true} 
+                                />
+                                {isSelected && <div className="absolute -top-2 right-0 bg-green-500 text-white rounded-full p-0.5 shadow-lg border-2 border-slate-900 z-30"><Icons.Check size={16} /></div>}
+                            </div>
+                        );
+                    })
+                 )}
+              </div>
+          </div>
       </div>
 
-      {/* Modals */}
-      {showShop && isHumanTurn && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                  <div className="flex justify-between items-center mb-6">
-                      <h2 className="text-2xl font-bold flex items-center gap-2"><ShoppingBag className="text-indigo-400"/> {t.shop}</h2>
-                      <div className="text-yellow-400 flex items-center gap-2 font-bold"><Coins/> {humanPlayer.gold}</div>
+      {/* Global Tooltip */}
+      {hoveredCard && (
+          <div className="fixed z-[100] pointer-events-none bg-slate-900/95 backdrop-blur border border-slate-600 p-4 rounded-xl shadow-2xl w-64 animate-fade-in" style={{ top: Math.min(window.innerHeight - 300, hoveredCard.y - 150), left: Math.min(window.innerWidth - 270, hoveredCard.x + 20) }}>
+              <div className="flex justify-between items-start mb-2">
+                  {/* @ts-ignore */}
+                  <h4 className="font-bold text-white text-lg leading-tight">{t.cards[hoveredCard.card.id]?.name || hoveredCard.card.name}</h4>
+                  <div className="flex gap-1">
+                      {hoveredCard.card.cost > 0 && <span className="text-[10px] bg-yellow-900/50 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-700 font-mono">{hoveredCard.card.cost}G</span>}
+                      {hoveredCard.card.manaCost > 0 && <span className="text-[10px] bg-blue-900/50 text-blue-400 px-1.5 py-0.5 rounded border border-blue-700 font-mono">{hoveredCard.card.manaCost}MP</span>}
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-                      {gameState.shopCards.map((card, i) => (
-                          <div key={i} className="flex flex-col gap-2">
-                              <CardComponent card={card} showCost={false} lang={lang} />
-                              <button 
-                                onClick={() => {
-                                    setGameState(buyCard(gameState!, card));
-                                }}
-                                disabled={humanPlayer.gold < card.cost || humanPlayer.hand.length >= 12}
-                                className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 disabled:bg-slate-700 disabled:text-slate-500 rounded font-bold text-xs flex items-center justify-center gap-1"
-                              >
-                                  {card.cost} <Coins size={12}/> {t.buy}
-                              </button>
-                          </div>
-                      ))}
-                  </div>
-                  <button onClick={() => setShowShop(false)} className="w-full py-3 bg-slate-800 hover:bg-slate-700 rounded-lg">{t.close}</button>
+              </div>
+              {/* @ts-ignore */}
+              <p className="text-slate-500 text-xs uppercase font-bold tracking-wider mb-2">{t.types[hoveredCard.card.type]}</p>
+              
+              <div className="flex gap-1 mb-2">
+                  {hoveredCard.card.element && hoveredCard.card.element !== ElementType.NEUTRAL && (
+                      // @ts-ignore
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${ELEMENT_CONFIG[hoveredCard.card.element].color} bg-slate-800 border border-current`}>{ELEMENT_CONFIG[hoveredCard.card.element].name}</span>
+                  )}
+                  {hoveredCard.card.alignment && (
+                      // @ts-ignore
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${ALIGNMENT_CONFIG[hoveredCard.card.alignment].color} bg-slate-800 border border-current`}>{ALIGNMENT_CONFIG[hoveredCard.card.alignment].name}</span>
+                  )}
+              </div>
+
+              <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 text-sm text-slate-300 leading-snug">
+                  {/* @ts-ignore */}
+                  {t.cards[hoveredCard.card.id]?.desc || hoveredCard.card.description}
+                  {hoveredCard.card.type === CardType.INDUSTRY && hoveredCard.card.value && (
+                      <div className="mt-1 text-emerald-400 font-bold">Income: +{hoveredCard.card.value}</div>
+                  )}
               </div>
           </div>
       )}
 
-      {showBank && isHumanTurn && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-             <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl w-full max-w-md shadow-2xl space-y-6">
-                 <div className="flex justify-between items-center">
-                      <h2 className="text-2xl font-bold flex items-center gap-2"><Landmark className="text-emerald-400"/> {t.bank}</h2>
-                      <button onClick={() => setShowBank(false)} className="text-slate-400 hover:text-white">✕</button>
-                 </div>
-                 
-                 <div className="bg-slate-800/50 p-4 rounded-lg space-y-2">
-                     <div className="flex justify-between text-sm">
-                         <span>Cash:</span>
-                         <span className="text-yellow-400 font-bold">{humanPlayer.gold}</span>
-                     </div>
-                     <div className="flex justify-between text-sm">
-                         <span>Deposit:</span>
-                         <span className="text-emerald-400 font-bold">{humanPlayer.bankDeposit}</span>
-                     </div>
-                     <div className="text-xs text-center text-slate-500 pt-2">{t.interestRate}</div>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4">
-                     <div className="space-y-2">
-                         <h4 className="font-bold text-center text-emerald-400">{t.deposit}</h4>
-                         <button onClick={() => setGameState(handleBankTransaction(gameState!, 10))} disabled={humanPlayer.gold < 10} className="w-full py-2 bg-emerald-900/50 border border-emerald-700 hover:bg-emerald-900 rounded text-sm">+10</button>
-                         <button onClick={() => setGameState(handleBankTransaction(gameState!, 50))} disabled={humanPlayer.gold < 50} className="w-full py-2 bg-emerald-900/50 border border-emerald-700 hover:bg-emerald-900 rounded text-sm">+50</button>
-                         <button onClick={() => setGameState(handleBankTransaction(gameState!, humanPlayer.gold))} disabled={humanPlayer.gold <= 0} className="w-full py-2 bg-emerald-900/50 border border-emerald-700 hover:bg-emerald-900 rounded text-sm">{t.all}</button>
-                     </div>
-                     <div className="space-y-2">
-                         <h4 className="font-bold text-center text-yellow-400">{t.withdraw}</h4>
-                         <button onClick={() => setGameState(handleBankTransaction(gameState!, -10))} disabled={humanPlayer.bankDeposit < 10} className="w-full py-2 bg-yellow-900/50 border border-yellow-700 hover:bg-yellow-900 rounded text-sm">-10</button>
-                         <button onClick={() => setGameState(handleBankTransaction(gameState!, -50))} disabled={humanPlayer.bankDeposit < 50} className="w-full py-2 bg-yellow-900/50 border border-yellow-700 hover:bg-yellow-900 rounded text-sm">-50</button>
-                         <button onClick={() => setGameState(handleBankTransaction(gameState!, -humanPlayer.bankDeposit))} disabled={humanPlayer.bankDeposit <= 0} className="w-full py-2 bg-yellow-900/50 border border-yellow-700 hover:bg-yellow-900 rounded text-sm">{t.all}</button>
-                     </div>
-                 </div>
-             </div>
+      {/* Guide Modal */}
+      {showGuideModal && (
+          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowGuideModal(false)}>
+              <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-2xl shadow-2xl relative max-h-[80vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setShowGuideModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full"><X size={20}/></button>
+                  <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2"><HelpCircle/> 簡易規則 (v3.0)</h2>
+                  <div className="text-sm text-slate-300 space-y-4 bg-slate-800 p-6 rounded-xl border border-slate-700 leading-relaxed">
+                      <p>1. <b>元素反應</b>: 攻擊會對敵人掛載「印記」。用不同元素攻擊「有印記」的敵人會引爆反應。</p>
+                      <p>2. <b>靈魂天平</b>: 
+                         <br/>打出神聖卡+1，邪惡卡-1。
+                         <br/>靈魂值越高，同陣營卡牌傷害越強。
+                         <br/>打出相反陣營卡牌會扣除 HP。
+                      </p>
+                      <p>3. <b>光之恩惠</b>: 
+                         <br/>當靈魂達到 <span className="text-yellow-400 font-bold">+3 (極致光明)</span> 時，下回合商店首購 <span className="text-white font-bold">50% OFF</span>。
+                      </p>
+                  </div>
+                  <div className="mt-4 text-center">
+                      <button onClick={() => {setShowGuideModal(false); setPreviousScreen('game'); setScreen('guide');}} className="text-indigo-400 hover:text-indigo-300 font-bold underline">查看完整指南</button>
+                  </div>
+              </div>
           </div>
       )}
+
+      {/* Quit Modal */}
+      {showQuitModal && (
+          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowQuitModal(false)}>
+              <div className="bg-slate-900 border-2 border-red-900/50 p-8 rounded-3xl w-full max-w-sm shadow-2xl relative text-center" onClick={e => e.stopPropagation()}>
+                  <div className="bg-red-900/20 p-4 rounded-full inline-block mb-4">
+                      <AlertTriangle size={48} className="text-red-500"/>
+                  </div>
+                  <h2 className="text-2xl font-bold mb-2 text-white">確定要離開嗎？</h2>
+                  <p className="text-slate-400 text-sm mb-8">目前的遊戲進度將不會保存，您將返回主選單。</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setShowQuitModal(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl transition-colors">
+                          取消
+                      </button>
+                      <button onClick={confirmLeaveGame} className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-colors shadow-lg shadow-red-900/30">
+                          確定離開
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Shop Modal */}
+      {showShop && (
+          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowShop(false)}>
+              <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-5xl h-[80vh] shadow-2xl relative flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900 rounded-t-3xl">
+                      <div>
+                          <h2 className="text-3xl font-bold text-white flex items-center gap-3"><ShoppingBag className="text-yellow-400"/> 商店</h2>
+                          <div className="text-slate-400 text-sm mt-1 flex items-center gap-4">
+                              <span>花費金錢購買強力卡牌。剩餘金錢: <span className="text-yellow-400 font-bold text-lg">{humanPlayer.gold} G</span></span>
+                          </div>
+                      </div>
+                      <button onClick={() => setShowShop(false)} className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"><X size={24}/></button>
+                  </div>
+
+                  {/* Discount Banner */}
+                  <div className="bg-gradient-to-r from-indigo-900/50 to-purple-900/50 p-2 text-center text-xs font-bold border-b border-white/5">
+                        <span className="text-yellow-400">提示：</span> 當靈魂達到【極致光明 (+3)】時，下一回合商店首次購買享有 <span className="text-white">50% 折扣</span>。
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-4 md:p-8 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 bg-slate-950/50">
+                      {gameState.shopCards.map((card) => {
+                          const isPurchased = card.purchasedByPlayerIds?.includes(humanPlayer.id);
+                          
+                          let cost = card.cost;
+                          let originalCost = card.cost;
+                          let hasDiscount = false;
+                          
+                          if (humanPlayer.shopDiscount && !humanPlayer.hasPurchasedInShop) {
+                              cost = Math.floor(cost * 0.5);
+                              hasDiscount = true;
+                          }
+
+                          const canAfford = humanPlayer.gold >= cost;
+                          const isMyTurn = isHumanTurn; 
+                          
+                          return (
+                              <div key={card.id} className="flex flex-col gap-3 group relative items-center">
+                                  <div className={`relative transition-all duration-300 ${isPurchased ? 'opacity-30 grayscale pointer-events-none' : 'hover:scale-105'}`}>
+                                      <CardComponent card={card} lang={lang} onMouseEnter={handleCardMouseEnter} onMouseLeave={handleCardMouseLeave} />
+                                      {isPurchased && (
+                                          <div className="absolute inset-0 flex items-center justify-center z-10">
+                                              <div className="bg-green-600 text-white font-bold px-4 py-2 rounded-lg transform -rotate-12 border-2 border-white shadow-xl">已購買</div>
+                                          </div>
+                                      )}
+                                      {!isPurchased && hasDiscount && (
+                                          <div className="absolute -top-2 -right-2 z-20 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg animate-bounce">
+                                              -50%
+                                          </div>
+                                      )}
+                                  </div>
+                                  <button 
+                                    onClick={() => handleBuy(card)}
+                                    disabled={isPurchased || !canAfford || !isMyTurn}
+                                    className={`w-full py-2.5 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors ${
+                                        isPurchased ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 
+                                        !isMyTurn ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700' :
+                                        canAfford ? 'bg-yellow-600 hover:bg-yellow-500 text-white shadow-lg' : 'bg-slate-800 text-red-400 border border-slate-700 cursor-not-allowed'
+                                    }`}
+                                    title={!isMyTurn ? "非您的回合無法購買" : ""}
+                                  >
+                                      {isPurchased ? '已擁有' : !isMyTurn ? '非回合行動' : canAfford ? (
+                                          hasDiscount ? <span className="flex gap-1"><s>{originalCost}G</s> {cost}G</span> : `購買 (${cost}G)`
+                                      ) : `資金不足 (${cost}G)`}
+                                  </button>
+                              </div>
+                          )
+                      })}
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 export enum NationType {
   FIGHTER = 'FIGHTER',
   HOLY = 'HOLY',
@@ -7,26 +8,83 @@ export enum NationType {
 
 export enum CardType {
   INDUSTRY = 'INDUSTRY',
-  ATTACK = 'ATTACK',
-  DEFENSE = 'DEFENSE',
-  MISSILE = 'MISSILE',
-  MAGIC = 'MAGIC',
+  ATTACK = 'ATTACK', 
+  MAGIC_ATTACK = 'MAGIC_ATTACK',
+  HEAL = 'HEAL',
+  SPECIAL = 'SPECIAL',
   CONTRACT = 'CONTRACT',
-  ENCHANTMENT = 'ENCHANTMENT'
+  RUNE = 'RUNE', 
+  RITUAL = 'RITUAL', 
+  ARTIFACT = 'ARTIFACT'
 }
 
-export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all';
+export enum ElementType {
+  NEUTRAL = 'NEUTRAL',
+  FIRE = 'FIRE',
+  WATER = 'WATER',
+  EARTH = 'EARTH',
+  AIR = 'AIR'
+}
+
+export enum AlignmentType {
+  HOLY = 'HOLY',
+  EVIL = 'EVIL'
+}
+
+export enum StanceType {
+  NONE = 'NONE',
+  LIGHT = 'LIGHT',
+  SHADOW = 'SHADOW'
+}
+
+export enum Rarity {
+  COMMON = 'COMMON',
+  RARE = 'RARE',
+  EPIC = 'EPIC',
+  LEGENDARY = 'LEGENDARY'
+}
+
+export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact';
 
 export interface Card {
   id: string;
   name: string; 
   type: CardType;
-  effectType?: EffectType; // New field for generic logic
+  element: ElementType;
+  alignment?: AlignmentType; // For Runes/Rituals/Magic
+  rarity: Rarity;
+  effectType?: EffectType;
   cost: number;
+  hpCost?: number; 
   manaCost: number;
   description: string;
-  value?: number;
+  value?: number; // Base Value
+  
+  // Dual Alignment Bonuses for Physical Weapons
+  holyBonus?: number;
+  evilBonus?: number;
+
+  runeLevel?: number; 
   isDisposable?: boolean;
+  eventPayload?: string; 
+  // Shop tracking
+  purchasedByPlayerIds?: string[];
+}
+
+export interface GameEvent {
+  id: string;
+  name: string;
+  type: 'DISASTER' | 'BLESSING';
+  description: string;
+  icon: string; 
+  effect: (state: GameState) => GameState; 
+  turnEffect?: (player: Player) => Player; 
+  globalModifier?: {
+      priceMultiplier?: number;
+      incomeMultiplier?: number;
+      damageMultiplier?: number;
+      manaRegenMultiplier?: number;
+  }
 }
 
 export interface Player {
@@ -40,29 +98,89 @@ export interface Player {
   maxMana: number;
   gold: number;
   income: number;
-  bankDeposit: number;
+  calculatedIncome?: number; 
+  damageBonus: number; 
   hand: Card[];
   lands: Card[];
+  artifacts: Card[]; 
   isDead: boolean;
+  isStunned: boolean;
+  isBleeding?: boolean;
+  techShield?: number;
+  
+  // New Soul System
+  soul: number; // -3 to 3
+  elementMark: ElementType | null; // Current element primed on player
+  maxPlaysModifier?: number; // For Mire effect
+
+  maxPlays: number; 
+  shopDiscount?: boolean; 
+  botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts'; // Added 'mcts'
+  playsUsed: number;
+  hasPurchasedInShop: boolean;
+  currentStance?: StanceType;
+}
+
+export interface RoomPlayer {
+  id: string;
+  name: string;
+  nation: NationType;
+  isHost: boolean;
+  isBot: boolean;
+  isReady: boolean; 
+  botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts';
 }
 
 export interface GameSettings {
   initialGold: number;
-  maxPlayers: number;
-  botCount: number;
-  botDifficulty: 'easy' | 'normal' | 'hard';
+  initialMana: number;
+  maxPlayers: number; 
   cardsDrawPerTurn: number;
+  maxHandSize: number;
   incomeMultiplier: number;
   eventFrequency: number;
+  isMultiplayer: boolean;
+  roomCode?: string;
+  shopSize: number;
+  healthMultiplier: number;
+  damageMultiplier: number;
+  priceMultiplier: number;
+  rarityWeights?: {
+      common: number;
+      rare: number;
+      epic: number;
+      legendary: number;
+  };
 }
 
 export interface ActionEvent {
   id: string;
   sourceId: string;
   targetId: string | null;
-  cardId: string;
-  type: CardType;
+  cardId: string; 
+  cardsPlayed?: Card[]; 
+  type: CardType | 'REPEL'; 
+  totalValue?: number;
   timestamp: number;
+  elementalModifier?: number;
+  comboName?: string;
+  reflectedDamage?: number; 
+}
+
+export type ReactionType = 'SPREAD' | 'MIRE' | 'ANNIHILATION' | 'OVERLOAD' | 'PRIME';
+
+export interface PendingAttack {
+  sourceId: string;
+  targetId: string;
+  damage: number;
+  cardNames: string[];
+  element: ElementType;
+  alignment?: AlignmentType; 
+  attackType: CardType;
+  
+  // New Reaction Logic
+  reaction?: ReactionType;
+  reactionEffectValue?: number; // e.g., self damage amount or heal amount
 }
 
 export interface GameState {
@@ -71,22 +189,102 @@ export interface GameState {
   players: Player[];
   shopCards: Card[];
   gameLog: LogEntry[];
-  playedCardTypesThisTurn: CardType[];
-  turnPhase: 'START' | 'ACTION' | 'END';
+  chat: ChatMessage[]; 
+  playedCardTypesThisTurn: CardType[]; 
+  turnPhase: 'START' | 'ACTION' | 'DEFENSE' | 'END'; 
+  pendingAttack: PendingAttack | null;
   winnerId: string | null;
   eventMessage: string | null;
+  currentEvent: GameEvent | null; 
   settings: GameSettings;
   lastAction: ActionEvent | null;
+  isDisconnected?: boolean;
+  disconnectTime?: number;
+  triggeredArtifacts?: string[]; 
+  topNotification?: { message: string, type: 'event' | 'artifact' | 'info' }; 
 }
 
 export interface LogEntry {
   id: string;
   message: string;
-  type: 'info' | 'combat' | 'event' | 'economy';
+  type: 'info' | 'combat' | 'event' | 'economy' | 'tutorial';
+  timestamp: number;
 }
 
-export const BANK_INTEREST_RATE = 0.1;
-export const MAX_HAND_SIZE = 12;
+export interface ChatMessage {
+  id: string;
+  sender: string;
+  text: string;
+  isSystem?: boolean;
+}
+
+// --- Data Record for ML Training (Updated) ---
+
+export interface SerializedCard {
+    id: string;
+    name: string;
+    type: string;
+    cost: number;
+    manaCost: number;
+    element?: string;
+    value?: number;
+}
+
+export interface SerializedPlayer {
+    id: string;
+    nation: string;
+    hp: number;
+    maxHp: number;
+    mana: number;
+    gold: number;
+    income: number;
+    soul: number;
+    hand: SerializedCard[];
+    lands: string[]; // Names
+    artifacts: string[]; // Names
+    elementMark: string | null;
+    isDead: boolean;
+}
+
+export interface BattleRecord {
+    gameId: string;
+    turn: number;
+    player: string; // Active Player Nation
+    
+    // Rich State (Full Snapshot)
+    state: {
+        turn: number;
+        phase: string;
+        event: string | null;
+        shop: SerializedCard[];
+        players: SerializedPlayer[];
+    };
+
+    // AI MCTS Info
+    policyTarget: { action: string, prob: number }[];
+    valueTarget: number;
+    actionTaken: string;
+}
+
+// --- AI Model Weights Structure ---
+export interface NeuralNetworkWeights {
+    initial_layer: {
+        0: { weight: number[][], bias: number[] }; // Linear
+        1: { weight: number[], bias: number[] }; // BatchNorm
+    };
+    res_blocks: {
+        0: { fc: { weight: number[][], bias: number[] }, bn: { weight: number[], bias: number[] } };
+        1: { fc: { weight: number[][], bias: number[] }, bn: { weight: number[], bias: number[] } };
+        2: { fc: { weight: number[][], bias: number[] }, bn: { weight: number[], bias: number[] } };
+    };
+    value_head: {
+        0: { weight: number[][], bias: number[] }; // Linear
+        2: { weight: number[][], bias: number[] }; // Linear
+    };
+}
+
 export const MAX_LAND_SIZE = 5;
+export const MAX_ARTIFACT_SIZE = 3;
+export const PLAYS_PER_TURN = 3;
 
 export type Language = 'en' | 'zh-TW';
