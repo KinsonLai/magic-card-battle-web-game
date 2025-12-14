@@ -1,14 +1,9 @@
 
 import { io, Socket } from 'socket.io-client';
-import { ClientAction, GameState, RoomPlayer } from '../types';
+import { ClientAction, GameState, RoomPlayer, RoomInfo, GameSettings } from '../types';
 
 class SocketService {
   private socket: Socket | null = null;
-  
-  // Logic:
-  // 1. If VITE_SERVER_URL is set (e.g. Netlify env var pointing to Render), use it.
-  // 2. If PROD, assume Monolith deployment (Same Origin).
-  // 3. Default to localhost for dev.
   private url: string = (import.meta as any).env?.VITE_SERVER_URL || 
                         ((import.meta as any).env?.PROD ? window.location.origin : 'http://localhost:3000');
 
@@ -50,16 +45,32 @@ class SocketService {
 
   // --- Lobby Events ---
 
-  public createRoom(player: Partial<RoomPlayer>, callback: (roomId: string) => void) {
-    this.socket?.emit('create_room', player, (response: any) => {
+  public getRooms(callback: (rooms: RoomInfo[]) => void) {
+      this.socket?.emit('get_rooms', callback);
+  }
+
+  public onRoomsChanged(callback: () => void) {
+      this.socket?.on('rooms_changed', callback);
+  }
+
+  public createRoom(params: { player: Partial<RoomPlayer>, roomName: string, password?: string, isPublic: boolean }, callback: (roomId: string) => void) {
+    this.socket?.emit('create_room', params, (response: any) => {
         if (response.roomId) callback(response.roomId);
     });
   }
 
-  public joinRoom(roomId: string, player: Partial<RoomPlayer>, callback: (success: boolean, msg?: string) => void) {
-    this.socket?.emit('join_room', { roomId, player }, (response: any) => {
-        callback(response.success, response.message);
+  public joinRoom(roomId: string, player: Partial<RoomPlayer>, password: string | undefined, callback: (success: boolean, msg?: string, needsPassword?: boolean) => void) {
+    this.socket?.emit('join_room', { roomId, player, password }, (response: any) => {
+        callback(response.success, response.message, response.needsPassword);
     });
+  }
+
+  public updateSettings(settings: GameSettings) {
+      this.socket?.emit('update_settings', settings);
+  }
+
+  public onSettingsUpdate(callback: (settings: GameSettings) => void) {
+      this.socket?.on('settings_update', callback);
   }
 
   public startGame() {

@@ -131,6 +131,17 @@ export interface RoomPlayer {
   botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts';
 }
 
+export interface RoomInfo {
+    id: string;
+    name: string;
+    playerCount: number;
+    maxPlayers: number;
+    isPublic: boolean;
+    hasPassword: boolean;
+    hostName: string;
+    status: 'WAITING' | 'PLAYING';
+}
+
 export interface GameSettings {
   initialGold: number;
   initialMana: number;

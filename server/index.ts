@@ -1,10 +1,11 @@
+
 import express from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { RoomPlayer, GameState, GameSettings, ClientAction, CardType } from '../types';
+import { RoomPlayer, GameState, GameSettings, ClientAction, RoomInfo } from '../types';
 import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, buyCard, sellCard, resolveAttack } from '../services/gameEngine';
 
 // ESM dirname workaround
@@ -24,6 +25,9 @@ const io = new Server(server, {
 
 interface RoomData {
     id: string;
+    name: string;
+    password?: string;
+    isPublic: boolean;
     players: RoomPlayer[];
     state: GameState | null;
     settings: GameSettings;
@@ -32,9 +36,7 @@ interface RoomData {
 const rooms: Record<string, RoomData> = {};
 
 // Serve Static Files (Vite Build)
-// This serves the frontend from the Node.js server
 const distPath = path.join(__dirname, '../dist');
-// Fix: Cast express.static result to any to resolve overload mismatch
 app.use(express.static(distPath) as any);
 
 io.on('connection', (socket: Socket) => {
@@ -42,14 +44,32 @@ io.on('connection', (socket: Socket) => {
 
     let currentRoomId: string | null = null;
 
-    socket.on('create_room', (playerInfo: Partial<RoomPlayer>, callback: (res: any) => void) => {
+    // --- Lobby: Get Room List ---
+    socket.on('get_rooms', (callback: (rooms: RoomInfo[]) => void) => {
+        const roomList: RoomInfo[] = Object.values(rooms)
+            .filter(r => r.isPublic && !r.state) // Only show public rooms that haven't started
+            .map(r => ({
+                id: r.id,
+                name: r.name,
+                playerCount: r.players.length,
+                maxPlayers: r.settings.maxPlayers,
+                isPublic: r.isPublic,
+                hasPassword: !!r.password,
+                hostName: r.players.find(p => p.isHost)?.name || 'Unknown',
+                status: r.state ? 'PLAYING' : 'WAITING'
+            }));
+        callback(roomList);
+    });
+
+    // --- Lobby: Create Room ---
+    socket.on('create_room', (data: { player: Partial<RoomPlayer>, roomName: string, password?: string, isPublic: boolean }, callback: (res: any) => void) => {
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
         
         const hostPlayer: RoomPlayer = {
             id: socket.id,
-            name: playerInfo.name || 'Player 1',
-            nation: playerInfo.nation as any || 'FIGHTER',
-            isHost: true,
+            name: data.player.name || 'Player 1',
+            nation: data.player.nation as any || 'FIGHTER',
+            isHost: true, // Explicitly set host
             isBot: false,
             isReady: true,
             botDifficulty: 'normal'
@@ -57,6 +77,9 @@ io.on('connection', (socket: Socket) => {
 
         rooms[roomId] = {
             id: roomId,
+            name: data.roomName || `Room ${roomId}`,
+            password: data.password || undefined,
+            isPublic: data.isPublic,
             players: [hostPlayer],
             state: null,
             settings: {
@@ -80,26 +103,35 @@ io.on('connection', (socket: Socket) => {
         socket.join(roomId);
         currentRoomId = roomId;
         console.log(`Room created: ${roomId} by ${hostPlayer.name}`);
+        
         callback({ roomId });
         io.to(roomId).emit('room_update', { players: rooms[roomId].players, hostId: socket.id });
+        io.emit('rooms_changed'); // Notify all lobbies to update list
     });
 
-    socket.on('join_room', (data: { roomId: string, player: Partial<RoomPlayer> }, callback: (res: any) => void) => {
-        const { roomId, player } = data;
+    // --- Lobby: Join Room ---
+    socket.on('join_room', (data: { roomId: string, player: Partial<RoomPlayer>, password?: string }, callback: (res: any) => void) => {
+        const { roomId, player, password } = data;
         const room = rooms[roomId];
 
         if (!room) {
-            callback({ success: false, message: 'Room not found' });
+            callback({ success: false, message: '房間不存在' });
             return;
         }
 
         if (room.players.length >= room.settings.maxPlayers) {
-            callback({ success: false, message: 'Room full' });
+            callback({ success: false, message: '房間已滿' });
             return;
         }
 
         if (room.state) {
-            callback({ success: false, message: 'Game already started' });
+            callback({ success: false, message: '遊戲已經開始' });
+            return;
+        }
+
+        // Password Check
+        if (room.password && room.password !== password) {
+            callback({ success: false, message: '密碼錯誤', needsPassword: true });
             return;
         }
 
@@ -118,29 +150,50 @@ io.on('connection', (socket: Socket) => {
         currentRoomId = roomId;
         
         callback({ success: true });
-        io.to(roomId).emit('room_update', { players: room.players, hostId: room.players[0].id });
-        io.to(roomId).emit('server_log', `${newPlayer.name} joined the room.`);
+        
+        // Find current host ID to ensure sync
+        const currentHost = room.players.find(p => p.isHost);
+        io.to(roomId).emit('room_update', { players: room.players, hostId: currentHost?.id || room.players[0].id });
+        io.to(roomId).emit('server_log', `${newPlayer.name} 加入了房間。`);
+        io.emit('rooms_changed');
     });
 
+    // --- Lobby: Update Room Settings ---
+    socket.on('update_settings', (settings: GameSettings) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+        
+        // Only host check
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || !player.isHost) return;
+
+        room.settings = { ...room.settings, ...settings };
+        // Broadcast new settings to room
+        io.to(currentRoomId).emit('settings_update', room.settings);
+    });
+
+    // --- Game: Start ---
     socket.on('start_game', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         
         // Only host can start
-        if (room.players[0].id !== socket.id) return;
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || !player.isHost) return;
 
         // Initialize Game
         const initialState = createInitialState(room.players, room.settings);
-        // Force multiplayer flag
         initialState.isMultiplayer = true;
         initialState.roomId = currentRoomId;
         
         room.state = initialState;
         
         io.to(currentRoomId).emit('game_start', initialState);
-        io.to(currentRoomId).emit('server_log', 'Game Started!');
+        io.to(currentRoomId).emit('server_log', '遊戲開始！');
+        io.emit('rooms_changed'); // Room no longer waiting
     });
 
+    // --- Game: Actions ---
     socket.on('game_action', (action: ClientAction) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
@@ -150,22 +203,18 @@ io.on('connection', (socket: Socket) => {
 
         // Validate Turn
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        
-        // If action needs current player authority
         const isTurnAction = ['PLAY_CARD', 'ATTACK', 'BUY_CARD', 'SELL_CARD', 'END_TURN'].includes(action.type);
         if (isTurnAction && currentPlayer.id !== socket.id) {
-            socket.emit('server_log', 'Not your turn!');
+            socket.emit('server_log', '這不是你的回合！');
             return;
         }
 
-        // Handle Actions
         try {
             switch (action.type) {
                 case 'PLAY_CARD': {
                     const card = currentPlayer.hand.find(c => c.id === action.cardId);
                     if (card) {
                         gameState = executeCardEffect(gameState, card, action.targetId || currentPlayer.id);
-                        io.to(currentRoomId).emit('server_log', `${currentPlayer.name} played ${card.name}`);
                     }
                     break;
                 }
@@ -173,18 +222,15 @@ io.on('connection', (socket: Socket) => {
                     const cards = currentPlayer.hand.filter(c => action.cardIds.includes(c.id));
                     if (cards.length > 0 && action.targetId) {
                         gameState = executeAttackAction(gameState, cards, action.targetId);
-                        io.to(currentRoomId).emit('server_log', `${currentPlayer.name} is attacking!`);
                     }
                     break;
                 }
                 case 'REPEL': {
-                    // Only target of pending attack can repel
                     if (gameState.pendingAttack && gameState.pendingAttack.targetId === socket.id) {
                         const targetPlayer = gameState.players.find(p => p.id === socket.id);
                         if (targetPlayer) {
                             const cards = targetPlayer.hand.filter(c => action.cardIds.includes(c.id));
                             gameState = resolveAttack(gameState, cards, true);
-                            io.to(currentRoomId).emit('server_log', `${targetPlayer.name} repelled the attack!`);
                         }
                     }
                     break;
@@ -192,7 +238,6 @@ io.on('connection', (socket: Socket) => {
                 case 'TAKE_DAMAGE': {
                     if (gameState.pendingAttack && gameState.pendingAttack.targetId === socket.id) {
                         gameState = resolveAttack(gameState, [], false);
-                        io.to(currentRoomId).emit('server_log', `Damage taken!`);
                     }
                     break;
                 }
@@ -227,13 +272,11 @@ io.on('connection', (socket: Socket) => {
                 }
             }
 
-            // Save and Broadcast State
             room.state = gameState;
             io.to(currentRoomId).emit('state_update', gameState);
 
-            // Check for Winner
             if (gameState.winnerId) {
-                io.to(currentRoomId).emit('server_log', `Game Over! Winner: ${gameState.winnerId}`);
+                io.to(currentRoomId).emit('server_log', `遊戲結束！獲勝者: ${gameState.winnerId}`);
             }
 
         } catch (e) {
@@ -245,20 +288,33 @@ io.on('connection', (socket: Socket) => {
         console.log(`User disconnected: ${socket.id}`);
         if (currentRoomId && rooms[currentRoomId]) {
             const room = rooms[currentRoomId];
+            const wasHost = room.players.find(p => p.id === socket.id)?.isHost;
+            
             room.players = room.players.filter(p => p.id !== socket.id);
             
-            io.to(currentRoomId).emit('room_update', { players: room.players, hostId: room.players[0]?.id });
-            io.to(currentRoomId).emit('server_log', 'A player disconnected.');
-
+            // Host Migration Logic
+            if (wasHost && room.players.length > 0) {
+                room.players[0].isHost = true;
+                io.to(currentRoomId).emit('server_log', `${room.players[0].name} 現在是房主。`);
+            }
+            
+            io.to(currentRoomId).emit('room_update', { 
+                players: room.players, 
+                hostId: room.players.find(p => p.isHost)?.id || '' 
+            });
+            io.to(currentRoomId).emit('server_log', '有玩家離開了房間。');
+            
+            // If room empty, delete
             if (room.players.length === 0) {
                 delete rooms[currentRoomId];
                 console.log(`Room ${currentRoomId} deleted`);
+            } else {
+                io.emit('rooms_changed'); // Update room lists counts
             }
         }
     });
 });
 
-// Handle React Routing, return all requests to React app
 app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
