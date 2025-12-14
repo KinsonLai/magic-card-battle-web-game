@@ -5,7 +5,7 @@ import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { RoomPlayer, GameState, GameSettings, ClientAction, RoomInfo } from '../types';
+import { RoomPlayer, GameState, GameSettings, ClientAction, RoomInfo, NationType } from '../types';
 import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, buyCard, sellCard, resolveAttack } from '../services/gameEngine';
 
 // ESM dirname workaround
@@ -176,6 +176,75 @@ io.on('connection', (socket: Socket) => {
         io.emit('rooms_changed');
     });
 
+    // --- Lobby: Add Bot (Host Only) ---
+    socket.on('add_bot', () => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+        
+        // Only host can add bots
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || !player.isHost) return;
+
+        if (room.players.length >= room.settings.maxPlayers) return;
+
+        const nations = Object.values(NationType);
+        const randomNation = nations[Math.floor(Math.random() * nations.length)];
+        const botId = `bot_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+        
+        const botPlayer: RoomPlayer = {
+            id: botId,
+            name: `AI Player ${Math.floor(Math.random() * 100)}`,
+            nation: randomNation,
+            isHost: false,
+            isBot: true,
+            isReady: true,
+            botDifficulty: 'normal'
+        };
+
+        room.players.push(botPlayer);
+        
+        io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
+        io.to(currentRoomId).emit('server_log', `房主加入了 AI: ${botPlayer.name}`);
+        io.emit('rooms_changed');
+    });
+
+    // --- Lobby: Kick Player (Host Only) ---
+    socket.on('kick_player', (targetId: string) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+        
+        // Only host can kick
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || !player.isHost) return;
+        if (targetId === player.id) return; // Cannot kick self
+
+        const targetIndex = room.players.findIndex(p => p.id === targetId);
+        if (targetIndex === -1) return;
+
+        const targetPlayer = room.players[targetIndex];
+        room.players.splice(targetIndex, 1);
+
+        // If it was a real user, disconnect their socket from room
+        // We can't force disconnect socket easily without tracking socket obj, 
+        // but we can emit a 'kicked' event to that room so the client handles it.
+        // For simplicity, just update room. If client is still connected, they will receive room_update without them in it? 
+        // Better: client receives 'room_update' checking if they are in the list.
+
+        io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
+        io.to(currentRoomId).emit('server_log', `${targetPlayer.name} 被踢出了房間。`);
+        
+        // Specific message for the kicked player (Client side needs to handle "am I still in player list")
+        io.to(targetId).emit('kicked'); 
+        
+        // If bot, just removed. If real player, they need to handle the UI switch
+        const targetSocket = io.sockets.sockets.get(targetId);
+        if (targetSocket) {
+            targetSocket.leave(currentRoomId);
+        }
+
+        io.emit('rooms_changed');
+    });
+
     // --- Lobby: Update Room Settings ---
     socket.on('update_settings', (settings: GameSettings) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
@@ -222,8 +291,20 @@ io.on('connection', (socket: Socket) => {
         // Validate Turn
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
         const isTurnAction = ['PLAY_CARD', 'ATTACK', 'BUY_CARD', 'SELL_CARD', 'END_TURN'].includes(action.type);
-        if (isTurnAction && currentPlayer.id !== socket.id) {
-            socket.emit('server_log', '這不是你的回合！');
+        
+        // Allow actions if it's player's turn OR it's a defensive phase targeting the player
+        let isAllowed = false;
+        if (currentPlayer.id === socket.id && isTurnAction) isAllowed = true;
+        if (action.type === 'REPEL' || action.type === 'TAKE_DAMAGE') {
+             // For defense actions, check if pending attack target is me
+             if (gameState.pendingAttack && gameState.pendingAttack.targetId === socket.id) {
+                 isAllowed = true;
+             }
+        }
+        if (action.type === 'SEND_CHAT') isAllowed = true;
+
+        if (!isAllowed) {
+            // Silently ignore or send warning
             return;
         }
 
@@ -312,17 +393,25 @@ io.on('connection', (socket: Socket) => {
             
             // Host Migration Logic
             if (wasHost && room.players.length > 0) {
-                room.players[0].isHost = true;
-                io.to(currentRoomId).emit('server_log', `${room.players[0].name} 現在是房主。`);
-                io.to(currentRoomId).emit('room_update', { 
-                    players: room.players, 
-                    hostId: room.players[0].id
-                });
+                // Prioritize real players for host migration
+                const realPlayer = room.players.find(p => !p.isBot);
+                if (realPlayer) {
+                    realPlayer.isHost = true;
+                    io.to(currentRoomId).emit('server_log', `${realPlayer.name} 現在是房主。`);
+                    io.to(currentRoomId).emit('room_update', { players: room.players, hostId: realPlayer.id });
+                } else {
+                    // If only bots left, close room? Or keep it open but headless. Usually close.
+                    delete rooms[currentRoomId];
+                    console.log(`Room ${currentRoomId} deleted (only bots left)`);
+                    io.emit('rooms_changed');
+                    return;
+                }
             } else if (room.players.length > 0) {
                  // Even if not host, update player list
+                 const currentHost = room.players.find(p => p.isHost);
                  io.to(currentRoomId).emit('room_update', { 
                     players: room.players, 
-                    hostId: room.players.find(p => p.isHost)?.id || ''
+                    hostId: currentHost?.id || ''
                 });
             }
             

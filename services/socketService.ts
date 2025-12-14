@@ -65,6 +65,14 @@ class SocketService {
     });
   }
 
+  public addBot() {
+      this.socket?.emit('add_bot');
+  }
+
+  public kickPlayer(targetId: string) {
+      this.socket?.emit('kick_player', targetId);
+  }
+
   public updateSettings(settings: GameSettings) {
       this.socket?.emit('update_settings', settings);
   }
@@ -81,6 +89,10 @@ class SocketService {
     this.socket?.on('room_update', (data: { players: RoomPlayer[], hostId: string }) => {
         callback(data.players, data.hostId);
     });
+  }
+
+  public onKicked(callback: () => void) {
+      this.socket?.on('kicked', callback);
   }
 
   // --- Game Events ---

@@ -625,20 +625,33 @@ const App: React.FC = () => {
                 <button onClick={() => setActiveTab('log')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'log' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}><History size={14} className="inline mr-2"/> {t.logs}</button>
                 <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'chat' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}><MessageSquare size={14} className="inline mr-2"/> Chat</button>
             </div>
+            {/* FIX: Ensure container allows scrolling by setting min-h-0 and flex structure */}
             {activeTab === 'log' ? (
-                <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide min-h-0">
-                    {gameState.gameLog.map(log => (
-                        <div key={log.id} className={`p-2.5 rounded-lg text-xs leading-relaxed border border-slate-800 ${log.type === 'combat' ? 'bg-red-950/20 text-red-200 border-red-900/30' : 'bg-slate-800/30 text-slate-400'}`}>
-                            <div className="mb-1 opacity-40 text-[10px]">{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</div>
-                            {log.message}
-                        </div>
-                    ))}
-                    <div ref={logEndRef} />
+                <div className="flex-1 flex flex-col min-h-0">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
+                        {gameState.gameLog.map(log => (
+                            <div key={log.id} className={`p-2.5 rounded-lg text-xs leading-relaxed border border-slate-800 ${log.type === 'combat' ? 'bg-red-950/20 text-red-200 border-red-900/30' : 'bg-slate-800/30 text-slate-400'}`}>
+                                <div className="mb-1 opacity-40 text-[10px]">{new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</div>
+                                {log.message}
+                            </div>
+                        ))}
+                        <div ref={logEndRef} />
+                    </div>
                 </div>
             ) : (
                 <div className="flex-1 flex flex-col min-h-0">
-                    <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">{gameState.chat.map(msg => <div key={msg.id} className="text-xs break-words"><span className="font-bold text-indigo-400">{msg.sender}:</span> <span className="text-slate-300">{msg.text}</span></div>)}<div ref={chatEndRef} /></div>
-                    <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 bg-slate-950 flex gap-2"><input value={chatInput} onChange={e => setChatInput(e.target.value)} className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs outline-none text-slate-200 focus:border-slate-600" placeholder={t.chatPlaceholder}/><button type="submit" className="bg-indigo-600 p-1.5 rounded text-white hover:bg-indigo-500"><Send size={14}/></button></form>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
+                        {gameState.chat.map(msg => (
+                            <div key={msg.id} className="text-xs break-words">
+                                <span className="font-bold text-indigo-400">{msg.sender}:</span> <span className="text-slate-300">{msg.text}</span>
+                            </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                    </div>
+                    <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 bg-slate-950 flex gap-2 shrink-0">
+                        <input value={chatInput} onChange={e => setChatInput(e.target.value)} className="flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs outline-none text-slate-200 focus:border-slate-600" placeholder={t.chatPlaceholder}/>
+                        <button type="submit" className="bg-indigo-600 p-1.5 rounded text-white hover:bg-indigo-500"><Send size={14}/></button>
+                    </form>
                 </div>
             )}
       </div>
