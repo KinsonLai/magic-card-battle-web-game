@@ -5,7 +5,7 @@ import { NATION_CONFIG } from '../constants';
 import { DEFAULT_SETTINGS } from '../services/gameEngine';
 import { socketService } from '../services/socketService';
 import { TRANSLATIONS } from '../locales';
-import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Wifi, WifiOff, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert } from 'lucide-react';
+import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Wifi, WifiOff, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: (players: RoomPlayer[], settings: GameSettings, isOnline?: boolean) => void;
@@ -16,34 +16,28 @@ interface LobbyScreenProps {
 export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang }) => {
   const t = TRANSLATIONS[lang] || TRANSLATIONS['zh-TW']; 
   
-  // --- High Level State ---
-  // Default to 'online' to show features immediately, fallback handled in connection
+  // State
   const [mode, setMode] = useState<'local' | 'online'>('online'); 
   const [view, setView] = useState<'browser' | 'room'>('browser');
-  
-  // Connection State
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  
-  // Online Browser State
   const [onlineRooms, setOnlineRooms] = useState<RoomInfo[]>([]);
   const [browserSearch, setBrowserSearch] = useState('');
+  
+  // Modals & Inputs
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState<string | null>(null); 
   const [passwordInput, setPasswordInput] = useState('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
-  
-  // Create Room Form
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPassword, setNewRoomPassword] = useState('');
   const [newRoomIsPublic, setNewRoomIsPublic] = useState(true);
 
-  // Room State (Shared)
+  // Room State
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
   const [roomCode] = useState(Math.random().toString(36).substring(2, 8).toUpperCase());
   const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
   
-  // User/Player State
   const [myName, setMyName] = useState('Player 1');
   const [myNation, setMyNation] = useState<NationType>(NationType.FIGHTER);
   const [players, setPlayers] = useState<RoomPlayer[]>([
@@ -52,39 +46,34 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const [settings, setSettings] = useState<GameSettings>({ ...DEFAULT_SETTINGS, roomCode });
   const [hostId, setHostId] = useState<string>('host_user');
 
-  // Helpers
-  const showToast = (message: string, type: 'error' | 'success' = 'error') => {
-      setNotification({ message, type });
-      setTimeout(() => setNotification(null), 3000);
-  };
+  // Computed
+  const myId = mode === 'online' ? socketService.getId() : 'host_user';
+  const amIHost = mode === 'local' ? true : (myId === hostId);
+  const amIReady = players.find(p => p.id === myId)?.isReady || false;
+  const allReady = players.every(p => p.isReady);
 
   const getNationName = (key: string) => {
       // @ts-ignore
       return t.nations[key]?.name || NATION_CONFIG[key]?.name || key;
   };
 
-  const myId = mode === 'online' ? socketService.getId() : 'host_user';
-  const amIHost = mode === 'local' ? true : (myId === hostId);
+  const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+      setNotification({ message, type });
+      setTimeout(() => setNotification(null), 3000);
+  };
 
   // --- Effects ---
 
+  // Initial connection if online
   useEffect(() => {
       if (mode === 'online') {
-          setView('browser');
           if (!isConnected && !isConnecting) {
               handleConnect();
           }
-      } else {
-          setView('room');
-          if (isConnected) {
-              socketService.disconnect();
-              setIsConnected(false);
-          }
-          setPlayers([{ id: 'host_user', name: myName, nation: myNation, isHost: true, isBot: false, isReady: true }]);
-          setOnlineRoomId(null);
       }
   }, [mode]);
 
+  // Socket Listeners
   useEffect(() => {
       if (mode === 'online' && isConnected) {
           socketService.onRoomUpdate((updatedPlayers, newHostId) => {
@@ -95,14 +84,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               }
           });
           
-          socketService.onRoomsChanged(() => {
-              refreshRoomList();
-          });
-
-          socketService.onSettingsUpdate((newSettings) => {
-              setSettings(newSettings);
-          });
-
+          socketService.onRoomsChanged(() => refreshRoomList());
+          socketService.onSettingsUpdate((newSettings) => setSettings(newSettings));
+          
           socketService.onKicked(() => {
               showToast("你被踢出了房間", 'error');
               setOnlineRoomId(null);
@@ -114,6 +98,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       }
   }, [mode, isConnected, view]);
 
+  // Sync Local Player info
   useEffect(() => {
       if (mode === 'local') {
         setPlayers(prev => prev.map(p => p.id === 'host_user' ? { ...p, name: myName, nation: myNation } : p));
@@ -130,8 +115,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       } catch (e) {
           console.error("Connection failed", e);
           setIsConnected(false);
-          showToast("無法連接到伺服器 (將切換至單機)", 'error');
-          setMode('local');
+          // Don't force local mode, just show error
+          showToast("無法連接伺服器", 'error');
       } finally {
           setIsConnecting(false);
       }
@@ -141,6 +126,23 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       socketService.getRooms((rooms) => {
           setOnlineRooms(rooms);
       });
+  };
+
+  const switchToLocal = () => {
+      setMode('local');
+      setView('room');
+      if (isConnected) {
+          socketService.disconnect();
+          setIsConnected(false);
+      }
+      setPlayers([{ id: 'host_user', name: myName, nation: myNation, isHost: true, isBot: false, isReady: true }]);
+      setOnlineRoomId(null);
+  };
+
+  const switchToOnline = () => {
+      setMode('online');
+      setView('browser');
+      handleConnect();
   };
 
   const handleCreateOnlineRoom = () => {
@@ -191,7 +193,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   const handleBack = () => {
       if (mode === 'online' && view === 'room') {
-          // Leave room logic
           socketService.disconnect(); 
           setIsConnected(false);
           setOnlineRoomId(null);
@@ -202,7 +203,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       }
   };
 
-  // --- Room Management ---
+  // --- Room Logic ---
+
+  const handleToggleReady = () => {
+      if (mode === 'online') {
+          socketService.toggleReady();
+      }
+  };
 
   const handleAddBot = () => {
       if (players.length >= settings.maxPlayers) return;
@@ -240,18 +247,21 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   const handleStartGame = () => {
       if (mode === 'online') {
+          if (!allReady) {
+              showToast("還有玩家未準備", 'error');
+              return;
+          }
           socketService.startGame();
       } else {
           onStart(players, settings, false);
       }
   };
 
-  // --- RENDER ---
+  // --- Render ---
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans text-slate-200">
         
-        {/* Toast */}
         {notification && (
             <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 animate-fade-in ${notification.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>
                 {notification.type === 'error' ? <AlertCircle size={20}/> : <CheckCircle size={20}/>}
@@ -259,20 +269,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
             </div>
         )}
 
-        {/* --- UNIFIED HEADER --- */}
+        {/* --- Header --- */}
         <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-50 shadow-md">
-            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
+                <div className="flex items-center gap-4">
                     <button onClick={handleBack} className="p-2 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors border border-slate-700 group">
-                        {mode === 'online' && view === 'room' ? <LogOut size={20} className="text-red-400 group-hover:-translate-x-1 transition-transform"/> : <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform"/>}
+                        {mode === 'online' && view === 'room' ? <LogOut size={20} className="text-red-400"/> : <ArrowLeft size={20}/>}
                     </button>
                     <div>
                         <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                            {mode === 'online' ? <Globe className="text-indigo-400"/> : <Monitor className="text-emerald-400"/>}
-                            {mode === 'online' ? (view === 'room' ? '多人房間' : '線上大廳') : '單人練習'}
+                            {mode === 'local' ? <Monitor className="text-emerald-400"/> : <Globe className="text-indigo-400"/>}
+                            {mode === 'local' ? '單人練習' : (view === 'room' ? '多人房間' : '線上大廳')}
                         </h1>
                         {mode === 'online' && view === 'room' && onlineRoomId && (
-                            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+                            <div className="flex items-center gap-2 text-xs font-mono text-slate-400 mt-1">
                                 <span>ID: {onlineRoomId}</span>
                                 <button onClick={() => {navigator.clipboard.writeText(onlineRoomId); showToast("已複製", 'success')}} className="hover:text-white"><Copy size={12}/></button>
                             </div>
@@ -280,69 +290,44 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                     </div>
                 </div>
 
-                {/* Center / Stats (Only online browser) */}
-                {mode === 'online' && view === 'browser' && (
-                    <div className="hidden md:flex items-center gap-4 text-xs font-bold bg-slate-950 px-4 py-2 rounded-full border border-slate-800">
-                        <div className={isConnected ? 'text-emerald-400 flex items-center gap-1' : 'text-red-400 flex items-center gap-1'}>
-                            {isConnected ? <Wifi size={14}/> : <WifiOff size={14}/>} {isConnected ? 'Connected' : 'Connecting...'}
-                        </div>
-                        <div className="w-px h-3 bg-slate-700"></div>
-                        <div className="text-slate-400">{onlineRooms.length} Active Rooms</div>
+                {/* Main Action Buttons */}
+                {view === 'browser' && mode === 'online' && (
+                    <div className="flex gap-3">
+                        <button onClick={switchToLocal} className="px-4 py-2 bg-emerald-900/30 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-500/30 rounded-lg text-sm font-bold flex items-center gap-2 transition-all">
+                            <Monitor size={16}/> 單人練習
+                        </button>
+                        <button onClick={() => { setNewRoomName(`${myName}的房間`); setShowCreateModal(true); }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold flex items-center gap-2 shadow-lg transition-transform active:scale-95">
+                            <Plus size={16}/> 建立房間
+                        </button>
                     </div>
                 )}
-
-                {/* Mode Toggle Switch */}
-                <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
-                    <button 
-                        onClick={() => setMode('local')}
-                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${mode === 'local' ? 'bg-emerald-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
-                    >
-                        <Monitor size={14}/> Local
-                    </button>
-                    <button 
-                        onClick={() => setMode('online')}
-                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${mode === 'online' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
-                    >
-                        <Globe size={14}/> Online
-                    </button>
-                </div>
             </div>
         </div>
 
-        {/* --- MAIN CONTENT AREA --- */}
+        {/* --- Content --- */}
         <div className="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar">
             <div className="max-w-7xl mx-auto h-full flex flex-col">
                 
-                {/* VIEW: BROWSER */}
+                {/* BROWSER VIEW */}
                 {mode === 'online' && view === 'browser' && (
-                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in min-h-0">
-                        {/* Server List */}
+                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 animate-fade-in">
+                        {/* Room List */}
                         <div className="lg:col-span-8 flex flex-col gap-4">
-                            {/* Toolbar */}
                             <div className="flex gap-3">
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-2.5 text-slate-500" size={16}/>
-                                    <input 
-                                        value={browserSearch}
-                                        onChange={e => setBrowserSearch(e.target.value)}
-                                        placeholder="搜尋房間..." 
-                                        className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-500 transition-colors"
-                                    />
+                                    <input value={browserSearch} onChange={e => setBrowserSearch(e.target.value)} placeholder="搜尋房間..." className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm outline-none focus:border-indigo-500 text-white"/>
                                 </div>
-                                <button onClick={refreshRoomList} className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-800 transition-colors"><RotateCcw size={18}/></button>
-                                <button onClick={() => { setNewRoomName(`${myName}的房間`); setShowCreateModal(true); }} className="px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold flex items-center gap-2 shadow-lg transition-transform active:scale-95 text-sm whitespace-nowrap">
-                                    <Plus size={16}/> 建立
-                                </button>
+                                <button onClick={refreshRoomList} className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 rounded-lg border border-slate-800"><RotateCcw size={18}/></button>
                             </div>
 
-                            {/* List */}
                             <div className="grid gap-3">
                                 {onlineRooms.filter(r => r.name.toLowerCase().includes(browserSearch.toLowerCase())).map(room => (
                                     <div key={room.id} className="group bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-4 rounded-xl flex items-center justify-between transition-all hover:shadow-lg relative overflow-hidden">
                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                         <div className="flex flex-col gap-1 z-10">
                                             <div className="flex items-center gap-2">
-                                                <h3 className="font-bold text-base text-slate-200 group-hover:text-white transition-colors">{room.name}</h3>
+                                                <h3 className="font-bold text-base text-slate-200 group-hover:text-white">{room.name}</h3>
                                                 {room.hasPassword && <Lock size={14} className="text-yellow-500"/>}
                                             </div>
                                             <div className="flex items-center gap-3 text-xs text-slate-500 font-mono">
@@ -357,11 +342,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                     {room.playerCount} / {room.maxPlayers}
                                                 </div>
                                             </div>
-                                            <button 
-                                                onClick={() => handleJoinAttempt(room)}
-                                                disabled={room.playerCount >= room.maxPlayers}
-                                                className={`px-4 py-2 rounded-lg font-bold text-sm transition-all active:scale-95 ${room.playerCount >= room.maxPlayers ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg'}`}
-                                            >
+                                            <button onClick={() => handleJoinAttempt(room)} disabled={room.playerCount >= room.maxPlayers} className={`px-4 py-2 rounded-lg font-bold text-sm transition-all active:scale-95 ${room.playerCount >= room.maxPlayers ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg'}`}>
                                                 {room.playerCount >= room.maxPlayers ? 'FULL' : 'JOIN'}
                                             </button>
                                         </div>
@@ -390,7 +371,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                         <div className="text-xs text-slate-500">Rank: Novice</div>
                                     </div>
                                 </div>
-                                <select value={myNation} onChange={e => setMyNation(e.target.value as any)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-300 outline-none">
+                                <select value={myNation} onChange={e => setMyNation(e.target.value as any)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-300 outline-none cursor-pointer hover:border-slate-500">
                                     {Object.keys(NATION_CONFIG).map(k => <option key={k} value={k}>{getNationName(k)}</option>)}
                                 </select>
                             </div>
@@ -399,26 +380,18 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                                 <h3 className="font-bold text-white flex items-center gap-2 mb-4 text-sm uppercase tracking-wider"><Lock size={16} className="text-emerald-400"/> 私人代碼</h3>
                                 <div className="flex gap-2">
-                                    <input 
-                                        value={joinCodeInput} 
-                                        onChange={e => setJoinCodeInput(e.target.value.toUpperCase())}
-                                        placeholder="ROOM ID" 
-                                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-center font-mono tracking-widest text-white outline-none focus:border-indigo-500 uppercase"
-                                        maxLength={6}
-                                    />
-                                    <button onClick={handleJoinByCode} className="px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg border border-slate-700 transition-colors">
-                                        <ChevronRight size={18}/>
-                                    </button>
+                                    <input value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value.toUpperCase())} placeholder="ROOM ID" className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-center font-mono tracking-widest text-white outline-none focus:border-indigo-500 uppercase" maxLength={6}/>
+                                    <button onClick={handleJoinByCode} className="px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-lg border border-slate-700 transition-colors"><ChevronRight size={18}/></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* VIEW: ROOM */}
+                {/* ROOM VIEW */}
                 {((mode === 'local') || (mode === 'online' && view === 'room')) && (
                     <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in min-h-0">
-                        {/* Players */}
+                        {/* Players Area */}
                         <div className="lg:col-span-8 overflow-y-auto custom-scrollbar pr-1">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {[...Array(settings.maxPlayers)].map((_, i) => {
@@ -449,13 +422,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                 <div className="p-4 flex flex-col justify-between h-full relative overflow-hidden">
                                                     <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-10 ${NATION_CONFIG[player.nation].bgColor} blur-2xl`}></div>
                                                     
+                                                    {/* Ready Badge */}
+                                                    {mode === 'online' && (
+                                                        <div className={`absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${player.isReady ? 'bg-green-900/50 text-green-400 border-green-500/30' : 'bg-slate-800 text-slate-500 border-slate-600'}`}>
+                                                            {player.isReady ? <><Check size={10}/> Ready</> : 'Not Ready'}
+                                                        </div>
+                                                    )}
+
                                                     <div className="flex justify-between items-start z-10">
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center border shadow-lg ${NATION_CONFIG[player.nation].bgColor} ${NATION_CONFIG[player.nation].borderColor}`}>
-                                                                {player.nation === NationType.FIGHTER && <Crown size={18} className={NATION_CONFIG[player.nation].color} />}
-                                                                {player.nation === NationType.HOLY && <Users size={18} className={NATION_CONFIG[player.nation].color} />}
-                                                                {player.nation === NationType.COMMERCIAL && <TrendingUp size={18} className={NATION_CONFIG[player.nation].color} />}
-                                                                {player.nation === NationType.MAGIC && <Zap size={18} className={NATION_CONFIG[player.nation].color} />}
+                                                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center border shadow-lg ${NATION_CONFIG[player.nation].bgColor} ${NATION_CONFIG[player.nation].borderColor}`}>
+                                                                {player.nation === NationType.FIGHTER && <Crown size={20} className={NATION_CONFIG[player.nation].color} />}
+                                                                {player.nation === NationType.HOLY && <Users size={20} className={NATION_CONFIG[player.nation].color} />}
+                                                                {player.nation === NationType.COMMERCIAL && <TrendingUp size={20} className={NATION_CONFIG[player.nation].color} />}
+                                                                {player.nation === NationType.MAGIC && <Zap size={20} className={NATION_CONFIG[player.nation].color} />}
                                                             </div>
                                                             <div>
                                                                 <div className="font-bold text-white text-base flex items-center gap-2">
@@ -467,9 +447,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div className="flex gap-2">
-                                                            {isHost && <Crown size={16} className="text-yellow-500 drop-shadow-lg"/>}
-                                                            {player.isBot && <Bot size={16} className="text-cyan-400 drop-shadow-lg"/>}
+                                                        <div className="flex gap-2 mt-8">
+                                                            {isHost && <Crown size={14} className="text-yellow-500 drop-shadow-lg"/>}
+                                                            {player.isBot && <Bot size={14} className="text-cyan-400 drop-shadow-lg"/>}
                                                         </div>
                                                     </div>
 
@@ -515,8 +495,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                             </div>
                         </div>
 
-                        {/* Settings */}
+                        {/* Control Panel */}
                         <div className="lg:col-span-4 flex flex-col gap-4">
+                            {/* Rules */}
                             <div className={`bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl ${!amIHost ? 'opacity-80 pointer-events-none' : ''}`}>
                                 <h3 className="font-bold text-white flex items-center gap-2 mb-6 text-sm uppercase tracking-wider"><Settings size={16} className="text-emerald-400"/> 遊戲規則</h3>
                                 <div className="space-y-5">
@@ -545,23 +526,39 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                 </div>
                             </div>
 
-                            {/* Start Action */}
-                            {amIHost ? (
-                                <button onClick={handleStartGame} disabled={players.length < 2} className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed transform transition-all hover:scale-[1.02] active:scale-95 text-lg">
-                                    <Play size={20} fill="currentColor"/> 開始遊戲
-                                </button>
-                            ) : (
-                                <div className="w-full py-4 bg-slate-900 text-slate-500 font-bold rounded-xl text-center border-2 border-dashed border-slate-800 animate-pulse flex items-center justify-center gap-2">
-                                    <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"></div> 等待房主...
-                                </div>
-                            )}
+                            {/* Actions */}
+                            <div className="flex flex-col gap-3">
+                                {amIHost ? (
+                                    <button 
+                                        onClick={handleStartGame} 
+                                        disabled={players.length < 2 || (mode === 'online' && !allReady)} 
+                                        className={`w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-3 transform transition-all hover:scale-[1.02] active:scale-95 text-lg ${(players.length < 2 || (mode === 'online' && !allReady)) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                                    >
+                                        <Play size={20} fill="currentColor"/> 
+                                        {mode === 'online' && !allReady ? '等待全員準備...' : '開始遊戲'}
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={handleToggleReady}
+                                        className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-3 transition-all ${amIReady ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-green-600 text-white hover:bg-green-500 shadow-lg shadow-green-900/30'}`}
+                                    >
+                                        {amIReady ? <><CheckCircle size={20}/> 取消準備</> : <><CheckCircle size={20}/> 準備完成</>}
+                                    </button>
+                                )}
+                                
+                                {!amIHost && (
+                                    <div className="text-center text-xs text-slate-500 font-bold animate-pulse mt-2">
+                                        等待房主開始遊戲...
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
             </div>
         </div>
 
-        {/* --- MODALS --- */}
+        {/* --- Modals --- */}
         {showCreateModal && (
             <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
                 <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-fade-in-up" onClick={e => e.stopPropagation()}>

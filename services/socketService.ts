@@ -65,6 +65,10 @@ class SocketService {
     });
   }
 
+  public toggleReady() {
+      this.socket?.emit('toggle_ready');
+  }
+
   public addBot() {
       this.socket?.emit('add_bot');
   }

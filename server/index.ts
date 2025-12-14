@@ -46,7 +46,6 @@ io.on('connection', (socket: Socket) => {
 
     // --- Lobby: Get Room List ---
     socket.on('get_rooms', (callback: (rooms: RoomInfo[]) => void) => {
-        // Filter out private rooms or playing rooms
         const roomList: RoomInfo[] = Object.values(rooms)
             .filter(r => r.isPublic && !r.state) 
             .map(r => ({
@@ -65,7 +64,6 @@ io.on('connection', (socket: Socket) => {
     // --- Lobby: Create Room ---
     socket.on('create_room', (data: { player: Partial<RoomPlayer>, roomName: string, password?: string, isPublic: boolean }, callback: (res: any) => void) => {
         if (!data || !data.player) {
-            console.error("Invalid create_room data:", data);
             if (typeof callback === 'function') callback({ error: "無效的數據" });
             return;
         }
@@ -76,9 +74,9 @@ io.on('connection', (socket: Socket) => {
             id: socket.id,
             name: data.player.name || 'Player 1',
             nation: data.player.nation as any || 'FIGHTER',
-            isHost: true, // Explicitly set host
+            isHost: true,
             isBot: false,
-            isReady: true,
+            isReady: true, // Host is always ready
             botDifficulty: 'normal'
         };
 
@@ -113,7 +111,7 @@ io.on('connection', (socket: Socket) => {
         
         if (typeof callback === 'function') callback({ roomId });
         io.to(roomId).emit('room_update', { players: rooms[roomId].players, hostId: socket.id });
-        io.emit('rooms_changed'); // Notify all lobbies to update list
+        io.emit('rooms_changed');
     });
 
     // --- Lobby: Join Room ---
@@ -141,15 +139,13 @@ io.on('connection', (socket: Socket) => {
             return;
         }
 
-        // Password Check
         if (room.password && room.password !== password) {
             if (typeof callback === 'function') callback({ success: false, message: '密碼錯誤', needsPassword: true });
             return;
         }
 
-        // Avoid duplicate join
         if (room.players.find(p => p.id === socket.id)) {
-             if (typeof callback === 'function') callback({ success: true }); // Already joined
+             if (typeof callback === 'function') callback({ success: true });
              return;
         }
 
@@ -159,7 +155,7 @@ io.on('connection', (socket: Socket) => {
             nation: player.nation as any || 'FIGHTER',
             isHost: false,
             isBot: false,
-            isReady: true,
+            isReady: false, // Guests must explicitly ready up
             botDifficulty: 'normal'
         };
 
@@ -169,19 +165,32 @@ io.on('connection', (socket: Socket) => {
         
         if (typeof callback === 'function') callback({ success: true });
         
-        // Find current host ID to ensure sync
         const currentHost = room.players.find(p => p.isHost);
         io.to(roomId).emit('room_update', { players: room.players, hostId: currentHost?.id || room.players[0].id });
         io.to(roomId).emit('server_log', `${newPlayer.name} 加入了房間。`);
         io.emit('rooms_changed');
     });
 
-    // --- Lobby: Add Bot (Host Only) ---
+    // --- Lobby: Toggle Ready ---
+    socket.on('toggle_ready', () => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+        const player = room.players.find(p => p.id === socket.id);
+        
+        if (player) {
+            player.isReady = !player.isReady;
+            // Host is usually effectively ready, but let's allow them to toggle too if they want
+            // Or enforce Host is always ready. Let's allow toggle for clarity.
+            
+            const currentHost = room.players.find(p => p.isHost);
+            io.to(currentRoomId).emit('room_update', { players: room.players, hostId: currentHost?.id || room.players[0].id });
+        }
+    });
+
+    // --- Lobby: Add Bot ---
     socket.on('add_bot', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        
-        // Only host can add bots
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.isHost) return;
 
@@ -197,26 +206,23 @@ io.on('connection', (socket: Socket) => {
             nation: randomNation,
             isHost: false,
             isBot: true,
-            isReady: true,
+            isReady: true, // Bots are always ready
             botDifficulty: 'normal'
         };
 
         room.players.push(botPlayer);
-        
         io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
         io.to(currentRoomId).emit('server_log', `房主加入了 AI: ${botPlayer.name}`);
         io.emit('rooms_changed');
     });
 
-    // --- Lobby: Kick Player (Host Only) ---
+    // --- Lobby: Kick Player ---
     socket.on('kick_player', (targetId: string) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        
-        // Only host can kick
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.isHost) return;
-        if (targetId === player.id) return; // Cannot kick self
+        if (targetId === player.id) return;
 
         const targetIndex = room.players.findIndex(p => p.id === targetId);
         if (targetIndex === -1) return;
@@ -224,38 +230,26 @@ io.on('connection', (socket: Socket) => {
         const targetPlayer = room.players[targetIndex];
         room.players.splice(targetIndex, 1);
 
-        // If it was a real user, disconnect their socket from room
-        // We can't force disconnect socket easily without tracking socket obj, 
-        // but we can emit a 'kicked' event to that room so the client handles it.
-        // For simplicity, just update room. If client is still connected, they will receive room_update without them in it? 
-        // Better: client receives 'room_update' checking if they are in the list.
-
         io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
         io.to(currentRoomId).emit('server_log', `${targetPlayer.name} 被踢出了房間。`);
         
-        // Specific message for the kicked player (Client side needs to handle "am I still in player list")
         io.to(targetId).emit('kicked'); 
         
-        // If bot, just removed. If real player, they need to handle the UI switch
         const targetSocket = io.sockets.sockets.get(targetId);
         if (targetSocket) {
             targetSocket.leave(currentRoomId);
         }
-
         io.emit('rooms_changed');
     });
 
-    // --- Lobby: Update Room Settings ---
+    // --- Lobby: Update Settings ---
     socket.on('update_settings', (settings: GameSettings) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        
-        // Only host check
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.isHost) return;
 
         room.settings = { ...room.settings, ...settings };
-        // Broadcast new settings to room
         io.to(currentRoomId).emit('settings_update', room.settings);
     });
 
@@ -263,12 +257,17 @@ io.on('connection', (socket: Socket) => {
     socket.on('start_game', () => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
-        
-        // Only host can start
         const player = room.players.find(p => p.id === socket.id);
+        
         if (!player || !player.isHost) return;
 
-        // Initialize Game
+        // Check if all players are ready
+        const allReady = room.players.every(p => p.isReady);
+        if (!allReady) {
+            // Optional: Emit error to host
+            return; 
+        }
+
         const initialState = createInitialState(room.players, room.settings);
         initialState.isMultiplayer = true;
         initialState.roomId = currentRoomId;
@@ -277,7 +276,7 @@ io.on('connection', (socket: Socket) => {
         
         io.to(currentRoomId).emit('game_start', initialState);
         io.to(currentRoomId).emit('server_log', '遊戲開始！');
-        io.emit('rooms_changed'); // Room no longer waiting
+        io.emit('rooms_changed');
     });
 
     // --- Game: Actions ---
@@ -288,25 +287,19 @@ io.on('connection', (socket: Socket) => {
 
         if (!gameState) return;
 
-        // Validate Turn
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
         const isTurnAction = ['PLAY_CARD', 'ATTACK', 'BUY_CARD', 'SELL_CARD', 'END_TURN'].includes(action.type);
         
-        // Allow actions if it's player's turn OR it's a defensive phase targeting the player
         let isAllowed = false;
         if (currentPlayer.id === socket.id && isTurnAction) isAllowed = true;
         if (action.type === 'REPEL' || action.type === 'TAKE_DAMAGE') {
-             // For defense actions, check if pending attack target is me
              if (gameState.pendingAttack && gameState.pendingAttack.targetId === socket.id) {
                  isAllowed = true;
              }
         }
         if (action.type === 'SEND_CHAT') isAllowed = true;
 
-        if (!isAllowed) {
-            // Silently ignore or send warning
-            return;
-        }
+        if (!isAllowed) return;
 
         try {
             switch (action.type) {
@@ -391,23 +384,19 @@ io.on('connection', (socket: Socket) => {
             
             room.players = room.players.filter(p => p.id !== socket.id);
             
-            // Host Migration Logic
             if (wasHost && room.players.length > 0) {
-                // Prioritize real players for host migration
                 const realPlayer = room.players.find(p => !p.isBot);
                 if (realPlayer) {
                     realPlayer.isHost = true;
+                    realPlayer.isReady = true; // New host automatically ready
                     io.to(currentRoomId).emit('server_log', `${realPlayer.name} 現在是房主。`);
                     io.to(currentRoomId).emit('room_update', { players: room.players, hostId: realPlayer.id });
                 } else {
-                    // If only bots left, close room? Or keep it open but headless. Usually close.
                     delete rooms[currentRoomId];
-                    console.log(`Room ${currentRoomId} deleted (only bots left)`);
                     io.emit('rooms_changed');
                     return;
                 }
             } else if (room.players.length > 0) {
-                 // Even if not host, update player list
                  const currentHost = room.players.find(p => p.isHost);
                  io.to(currentRoomId).emit('room_update', { 
                     players: room.players, 
@@ -417,18 +406,12 @@ io.on('connection', (socket: Socket) => {
             
             io.to(currentRoomId).emit('server_log', '有玩家離開了房間。');
             
-            // If room empty, delete
             if (room.players.length === 0) {
                 delete rooms[currentRoomId];
-                console.log(`Room ${currentRoomId} deleted`);
             }
-            io.emit('rooms_changed'); // Update room lists counts
+            io.emit('rooms_changed');
         }
     });
-});
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
