@@ -202,6 +202,10 @@ export interface GameState {
   disconnectTime?: number;
   triggeredArtifacts?: string[]; 
   topNotification?: { message: string, type: 'event' | 'artifact' | 'info' }; 
+  
+  // Socket Extra
+  roomId?: string;
+  isMultiplayer?: boolean;
 }
 
 export interface LogEntry {
@@ -227,6 +231,17 @@ export interface BattleRecord {
     valueTarget: number; // Final game result (-1 or 1)
     actionTaken: string;
 }
+
+// Socket Action Types
+export type ClientAction = 
+  | { type: 'PLAY_CARD', cardId: string, targetId?: string }
+  | { type: 'ATTACK', cardIds: string[], targetId: string }
+  | { type: 'REPEL', cardIds: string[] }
+  | { type: 'TAKE_DAMAGE' }
+  | { type: 'BUY_CARD', cardId: string }
+  | { type: 'SELL_CARD', cardId: string }
+  | { type: 'END_TURN' }
+  | { type: 'SEND_CHAT', message: string };
 
 export const MAX_LAND_SIZE = 5;
 export const MAX_ARTIFACT_SIZE = 3;

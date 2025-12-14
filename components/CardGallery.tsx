@@ -4,8 +4,8 @@ import { CARDS, ELEMENT_CONFIG, GAME_EVENTS, ALIGNMENT_CONFIG } from '../constan
 import { Card as CardComponent } from './Card';
 import { Language, CardType, Card, ElementType, AlignmentType } from '../types';
 import { TRANSLATIONS } from '../locales';
+import { getIconComponent } from '../utils/iconMap';
 import { ArrowLeft, Coins, Zap, Search, ZapOff, Cross, Ghost } from 'lucide-react';
-import * as Icons from 'lucide-react';
 
 interface CardGalleryProps {
   lang: Language;
@@ -145,13 +145,14 @@ export const CardGallery: React.FC<CardGalleryProps> = ({ lang, onBack }) => {
                         {Object.values(ElementType).map(elm => {
                             const conf = ELEMENT_CONFIG[elm];
                             const isActive = filterElement === elm;
+                            const ElIcon = getIconComponent(conf.icon);
                             return (
                                 <button 
                                     key={elm}
                                     onClick={() => setFilterElement(elm)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${isActive ? `bg-slate-100 text-slate-900 border-white shadow-lg` : 'bg-slate-950 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
                                 >
-                                    <conf.icon size={12} className={isActive ? 'text-slate-900' : conf.color} /> {conf.name}
+                                    <ElIcon size={12} className={isActive ? 'text-slate-900' : conf.color} /> {conf.name}
                                 </button>
                             );
                         })}
@@ -168,13 +169,14 @@ export const CardGallery: React.FC<CardGalleryProps> = ({ lang, onBack }) => {
                         {Object.values(AlignmentType).map(align => {
                             const conf = ALIGNMENT_CONFIG[align];
                             const isActive = filterAlignment === align;
+                            const AlIcon = getIconComponent(conf.icon);
                             return (
                                 <button 
                                     key={align}
                                     onClick={() => setFilterAlignment(align)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${isActive ? `bg-slate-100 text-slate-900 border-white shadow-lg` : 'bg-slate-950 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
                                 >
-                                    <conf.icon size={12} className={isActive ? 'text-slate-900' : conf.color} /> {conf.name}
+                                    <AlIcon size={12} className={isActive ? 'text-slate-900' : conf.color} /> {conf.name}
                                 </button>
                             );
                         })}
@@ -205,13 +207,12 @@ export const CardGallery: React.FC<CardGalleryProps> = ({ lang, onBack }) => {
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
                 {GAME_EVENTS.map(evt => {
-                    // @ts-ignore
-                    const Icon = Icons[evt.icon] || ZapOff;
+                    const EvIcon = getIconComponent(evt.icon);
                     return (
                         <div key={evt.id} className={`p-6 rounded-2xl border flex flex-col gap-4 ${evt.type === 'DISASTER' ? 'bg-red-950/20 border-red-900/50' : 'bg-yellow-950/20 border-yellow-900/50'}`}>
                             <div className="flex items-center gap-4">
                                 <div className={`p-3 rounded-full ${evt.type === 'DISASTER' ? 'bg-red-900 text-red-200' : 'bg-yellow-900 text-yellow-200'}`}>
-                                    <Icon size={24}/>
+                                    <EvIcon size={24}/>
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-lg text-white">{evt.name}</h3>

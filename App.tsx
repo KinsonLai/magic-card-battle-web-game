@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, Card, CardType, Language, GameSettings, RoomPlayer, MAX_LAND_SIZE, ChatMessage, MAX_ARTIFACT_SIZE, ElementType, PLAYS_PER_TURN, AlignmentType, StanceType } from './types';
 import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, resolveAttack, buyCard, sellCard } from './services/gameEngine';
+import { socketService } from './services/socketService';
 import { StartScreen } from './components/StartScreen';
 import { LobbyScreen } from './components/LobbyScreen';
 import { CardGallery } from './components/CardGallery';
@@ -11,8 +12,9 @@ import { DebugConsole } from './components/DebugConsole';
 import { SimulationScreen } from './components/SimulationScreen';
 import { NATION_CONFIG, ELEMENT_CONFIG, ALIGNMENT_CONFIG, getComplexElementName } from './constants';
 import { TRANSLATIONS } from './locales';
+import { getIconComponent } from './utils/iconMap';
 import * as Icons from 'lucide-react';
-import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles } from 'lucide-react';
+import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi } from 'lucide-react';
 
 const App: React.FC = () => {
   const [screen, setScreen] = useState<'start' | 'lobby' | 'gallery' | 'guide' | 'game' | 'simulation'>('start');
@@ -38,10 +40,38 @@ const App: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const t = TRANSLATIONS[lang];
 
+  // Socket Integration Hook
+  useEffect(() => {
+      socketService.onGameStart((initialState) => {
+          setGameState({ ...initialState, isMultiplayer: true });
+          setScreen('game');
+      });
+
+      socketService.onStateUpdate((newState) => {
+          setGameState({ ...newState, isMultiplayer: true });
+          // Reset selections on update to prevent stale data
+          setSelectedCardIds([]);
+          setTargetId(null);
+      });
+
+      socketService.onLog((msg) => {
+          setTopNotification({ message: msg, type: 'info' });
+      });
+
+      return () => {
+          // Cleanup listeners if possible
+      }
+  }, []);
+
   // --- Helpers ---
   const getPreviewStats = () => {
       if (!gameState || selectedCardIds.length === 0) return null;
-      const humanPlayer = gameState.players.find(p => p.isHuman);
+      // In online mode, we assume the local player index is correct OR we find by ID if we stored it
+      const socketId = socketService.getId();
+      const humanPlayer = gameState.isMultiplayer 
+          ? gameState.players.find(p => p.id === socketId) || gameState.players[gameState.currentPlayerIndex]
+          : gameState.players.find(p => p.isHuman);
+      
       if (!humanPlayer) return null;
       const cards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
       if (cards.length === 0) return null;
@@ -147,9 +177,10 @@ const App: React.FC = () => {
       return () => window.removeEventListener('mousemove', handleMouseMove);
   }, [hoveredCard]);
 
-  // AI & Game Loop
+  // AI & Game Loop (Only active for Local Games)
   useEffect(() => {
     if (!gameState || gameState.winnerId || screen !== 'game' || gameState.isDisconnected) return;
+    if (gameState.isMultiplayer) return; // Disable local loop for multiplayer
 
     if (gameState.turnPhase === 'ACTION') {
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
@@ -256,14 +287,22 @@ const App: React.FC = () => {
   }, [gameState?.lastAction]);
 
   // --- Handlers ---
-  const handleStartGame = (players: RoomPlayer[], settings: GameSettings) => {
-    setGameState(createInitialState(players, settings));
-    setScreen('game');
+  const handleStartGame = (players: RoomPlayer[], settings: GameSettings, isOnline: boolean = false) => {
+    if (isOnline) {
+        // Just wait for socket event
+    } else {
+        setGameState(createInitialState(players, settings));
+        setScreen('game');
+    }
   };
   
   const handleEndTurn = () => {
     if (!gameState) return;
-    setGameState(nextTurn(gameState));
+    if (gameState.isMultiplayer) {
+        socketService.emitAction({ type: 'END_TURN' });
+    } else {
+        setGameState(nextTurn(gameState));
+    }
     setSelectedCardIds([]);
     setTargetId(null);
   };
@@ -272,12 +311,17 @@ const App: React.FC = () => {
       e.preventDefault();
       if (!chatInput.trim() || !gameState) return;
       const player = gameState.players.find(p => p.isHuman);
-      const msg: ChatMessage = {
-          id: Date.now().toString(),
-          sender: player?.name || 'Unknown',
-          text: chatInput
-      };
-      setGameState({ ...gameState, chat: [...gameState.chat, msg] });
+      
+      if (gameState.isMultiplayer) {
+          socketService.emitAction({ type: 'SEND_CHAT', message: chatInput });
+      } else {
+          const msg: ChatMessage = {
+              id: Date.now().toString(),
+              sender: player?.name || 'Unknown',
+              text: chatInput
+          };
+          setGameState({ ...gameState, chat: [...gameState.chat, msg] });
+      }
       setChatInput('');
   };
 
@@ -303,7 +347,12 @@ const App: React.FC = () => {
           setSelectedCardIds(prev => prev.filter(id => id !== card.id));
       } else {
           // --- Stacking Rules Implementation ---
-          const humanPlayer = gameState!.players.find(p => p.isHuman)!;
+          // Need to find correct player based on online/local
+          const socketId = socketService.getId();
+          const humanPlayer = gameState!.isMultiplayer 
+            ? gameState!.players.find(p => p.id === socketId)! 
+            : gameState!.players.find(p => p.isHuman)!;
+
           const currentSelected = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
           
           let canSelect = false;
@@ -367,7 +416,11 @@ const App: React.FC = () => {
 
   const handleExecutePlay = () => {
       if (!gameState || selectedCardIds.length === 0) return;
-      const humanPlayer = gameState.players.find(p => p.isHuman)!;
+      const socketId = socketService.getId();
+      const humanPlayer = gameState.isMultiplayer
+        ? gameState.players.find(p => p.id === socketId)!
+        : gameState.players.find(p => p.isHuman)!;
+
       const selectedCards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
       if (selectedCards.length === 0) return;
 
@@ -376,13 +429,18 @@ const App: React.FC = () => {
       const hasMagic = types.includes(CardType.MAGIC_ATTACK);
       const isRuneOnly = selectedCards.every(c => c.type === CardType.RUNE);
 
+      // Defense Logic
       if (gameState.turnPhase === 'DEFENSE') {
            if (isRuneOnly) {
               alert(t.cantUseAlone);
               return;
            }
            if (hasAttack || hasMagic || (types.includes(CardType.RUNE) && hasAttack)) {
-             setGameState(resolveAttack(gameState, selectedCards, true));
+             if (gameState.isMultiplayer) {
+                 socketService.emitAction({ type: 'REPEL', cardIds: selectedCardIds });
+             } else {
+                 setGameState(resolveAttack(gameState, selectedCards, true));
+             }
              setSelectedCardIds([]);
              return;
            }
@@ -391,24 +449,37 @@ const App: React.FC = () => {
 
       const currentPlayer = gameState.players[gameState.currentPlayerIndex];
 
+      // Attack Logic
       if (hasAttack || hasMagic) {
-          // Attack execution
           if (!targetId) {
              alert(t.selectTargetHint);
              return;
           }
-          setGameState(executeAttackAction(gameState, selectedCards, targetId));
-      } else if (isRuneOnly) {
-          alert(t.cantUseAlone);
-          return;
-      } else if (['heal', 'mana', 'full_restore_hp', 'buff_damage', 'equip_artifact'].includes(selectedCards[0].effectType || '') || selectedCards[0].type === CardType.HEAL || selectedCards[0].type === CardType.ARTIFACT) {
+          if (gameState.isMultiplayer) {
+              socketService.emitAction({ type: 'ATTACK', cardIds: selectedCardIds, targetId: targetId });
+          } else {
+              setGameState(executeAttackAction(gameState, selectedCards, targetId));
+          }
+      } 
+      // Play Card Logic
+      else {
+          if (isRuneOnly) {
+              alert(t.cantUseAlone);
+              return;
+          }
           if (selectedCards.length > 1) { alert(t.notStackable); return; }
-          setGameState(executeCardEffect(gameState, selectedCards[0], currentPlayer.id));
-      } else if (selectedCards[0].type === CardType.RITUAL) {
-          setGameState(executeCardEffect(gameState, selectedCards[0]));
-      } else {
-          if (selectedCards.length > 1) { alert(t.notStackable); return; }
-          setGameState(executeCardEffect(gameState, selectedCards[0], targetId || undefined));
+          
+          if (gameState.isMultiplayer) {
+              socketService.emitAction({ type: 'PLAY_CARD', cardId: selectedCardIds[0], targetId: targetId || undefined });
+          } else {
+              if (['heal', 'mana', 'full_restore_hp', 'buff_damage', 'equip_artifact'].includes(selectedCards[0].effectType || '') || selectedCards[0].type === CardType.HEAL || selectedCards[0].type === CardType.ARTIFACT) {
+                  setGameState(executeCardEffect(gameState, selectedCards[0], currentPlayer.id));
+              } else if (selectedCards[0].type === CardType.RITUAL) {
+                  setGameState(executeCardEffect(gameState, selectedCards[0]));
+              } else {
+                  setGameState(executeCardEffect(gameState, selectedCards[0], targetId || undefined));
+              }
+          }
       }
       setSelectedCardIds([]);
       setTargetId(null);
@@ -416,22 +487,36 @@ const App: React.FC = () => {
 
   const handleSell = () => {
       if (!gameState || selectedCardIds.length !== 1) return;
-      const humanPlayer = gameState.players.find(p => p.isHuman)!;
-      const card = humanPlayer.hand.find(c => c.id === selectedCardIds[0]);
-      if (card) {
-          setGameState(sellCard(gameState, card));
+      
+      if (gameState.isMultiplayer) {
+          socketService.emitAction({ type: 'SELL_CARD', cardId: selectedCardIds[0] });
           setSelectedCardIds([]);
+      } else {
+          const humanPlayer = gameState.players.find(p => p.isHuman)!;
+          const card = humanPlayer.hand.find(c => c.id === selectedCardIds[0]);
+          if (card) {
+              setGameState(sellCard(gameState, card));
+              setSelectedCardIds([]);
+          }
       }
   };
 
   const handleBuy = (card: Card) => {
       if (!gameState) return;
-      setGameState(buyCard(gameState, card));
+      if (gameState.isMultiplayer) {
+          socketService.emitAction({ type: 'BUY_CARD', cardId: card.id });
+      } else {
+          setGameState(buyCard(gameState, card));
+      }
   };
 
   const handleSkipDefense = () => {
       if (!gameState) return;
-      setGameState(resolveAttack(gameState, [], false));
+      if (gameState.isMultiplayer) {
+          socketService.emitAction({ type: 'TAKE_DAMAGE' });
+      } else {
+          setGameState(resolveAttack(gameState, [], false));
+      }
   };
 
   const handleLeaveGame = () => {
@@ -439,6 +524,9 @@ const App: React.FC = () => {
   };
 
   const confirmLeaveGame = () => {
+      if (gameState?.isMultiplayer) {
+          socketService.disconnect();
+      }
       setGameState(null); 
       setScreen('start');
       setShowQuitModal(false);
@@ -475,8 +563,13 @@ const App: React.FC = () => {
   if (screen === 'lobby') return <LobbyScreen lang={lang} onStart={handleStartGame} onBack={() => setScreen('start')} />;
   if (!gameState) return null; 
 
+  const socketId = socketService.getId();
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-  const humanPlayer = gameState.players.find(p => p.isHuman)!;
+  // Determine Human Player based on Mode
+  const humanPlayer = gameState.isMultiplayer
+    ? (gameState.players.find(p => p.id === socketId) || gameState.players[0]) 
+    : gameState.players.find(p => p.isHuman)!;
+
   const isHumanTurn = currentPlayer.id === humanPlayer.id && gameState.turnPhase === 'ACTION';
   const isDefensePhase = gameState.turnPhase === 'DEFENSE';
   const amIBeingAttacked = isDefensePhase && gameState.pendingAttack?.targetId === humanPlayer.id;
@@ -496,7 +589,7 @@ const App: React.FC = () => {
   if (gameState.currentEvent?.globalModifier?.incomeMultiplier !== undefined) totalIncome *= gameState.currentEvent.globalModifier.incomeMultiplier;
   
   // @ts-ignore
-  const EventIcon = gameState.currentEvent ? Icons[gameState.currentEvent.icon] || Icons.Zap : Icons.Zap;
+  const EventIcon = gameState.currentEvent ? getIconComponent(gameState.currentEvent.icon) : Icons.Zap;
 
   return (
     <div className="h-[100dvh] w-screen bg-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30 overflow-hidden flex flex-col lg:grid lg:grid-cols-[280px_1fr]">
@@ -562,6 +655,12 @@ const App: React.FC = () => {
                   </div>
               )}
 
+              {gameState.isMultiplayer && (
+                  <div className="flex items-center gap-2 bg-indigo-900/50 px-2 py-1 rounded border border-indigo-500/30">
+                      <Wifi size={14} className="text-green-400"/> <span className="text-xs font-mono text-indigo-200">ONLINE</span>
+                  </div>
+              )}
+
               <div className="flex items-center gap-2">
                   <button onClick={() => setShowDebug(true)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-green-400 transition-colors" title="Debug Console (~)"><Terminal size={16}/></button>
                   <button onClick={() => setShowGuideModal(true)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" title="指南"><BookOpen size={20}/></button>
@@ -595,7 +694,7 @@ const App: React.FC = () => {
                                         {opp.elementMark && (
                                             <div className="bg-black rounded-full p-0.5 border border-white/20">
                                                 {/* @ts-ignore */}
-                                                {ELEMENT_CONFIG[opp.elementMark] && React.createElement(ELEMENT_CONFIG[opp.elementMark].icon, {size: 10, className: ELEMENT_CONFIG[opp.elementMark].color})}
+                                                {ELEMENT_CONFIG[opp.elementMark] && React.createElement(getIconComponent(ELEMENT_CONFIG[opp.elementMark].icon), {size: 10, className: ELEMENT_CONFIG[opp.elementMark].color})}
                                             </div>
                                         )}
                                         {opp.isStunned && <Zap size={12} className="text-yellow-500 fill-yellow-500 animate-pulse"/>}
@@ -725,7 +824,7 @@ const App: React.FC = () => {
                             {humanPlayer.elementMark && (
                                 <div className="absolute -top-2 -right-2 bg-black rounded-full p-1 border-2 border-white shadow-lg animate-pulse" title="元素印記">
                                     {/* @ts-ignore */}
-                                    {ELEMENT_CONFIG[humanPlayer.elementMark] && React.createElement(ELEMENT_CONFIG[humanPlayer.elementMark].icon, {size: 12, className: ELEMENT_CONFIG[humanPlayer.elementMark].color})}
+                                    {ELEMENT_CONFIG[humanPlayer.elementMark] && React.createElement(getIconComponent(ELEMENT_CONFIG[humanPlayer.elementMark].icon), {size: 12, className: ELEMENT_CONFIG[humanPlayer.elementMark].color})}
                                 </div>
                             )}
                         </div>
@@ -772,7 +871,7 @@ const App: React.FC = () => {
                                 {/* @ts-ignore */}
                                 <div className={`flex items-center gap-1 text-xs font-bold ${ELEMENT_CONFIG[humanPlayer.elementMark].color}`}>
                                     {/* @ts-ignore */}
-                                    {React.createElement(ELEMENT_CONFIG[humanPlayer.elementMark].icon, {size: 14})}
+                                    {React.createElement(getIconComponent(ELEMENT_CONFIG[humanPlayer.elementMark].icon), {size: 14})}
                                     {/* @ts-ignore */}
                                     {ELEMENT_CONFIG[humanPlayer.elementMark].name}
                                 </div>
@@ -860,9 +959,9 @@ const App: React.FC = () => {
                               {(preview.isAttack || preview.isDefensePhase) && (
                                   <div className="flex items-center gap-2 px-2 border-l border-r border-slate-600">
                                       {/* @ts-ignore */}
-                                      {ELEMENT_CONFIG[preview.element] && React.createElement(ELEMENT_CONFIG[preview.element].icon, {size: 14, className: ELEMENT_CONFIG[preview.element].color})}
+                                      {ELEMENT_CONFIG[preview.element] && React.createElement(getIconComponent(ELEMENT_CONFIG[preview.element].icon), {size: 14, className: ELEMENT_CONFIG[preview.element].color})}
                                       {/* @ts-ignore */}
-                                      {preview.alignment && ALIGNMENT_CONFIG[preview.alignment] && React.createElement(ALIGNMENT_CONFIG[preview.alignment].icon, {size: 14, className: ALIGNMENT_CONFIG[preview.alignment].color})}
+                                      {preview.alignment && ALIGNMENT_CONFIG[preview.alignment] && React.createElement(getIconComponent(ALIGNMENT_CONFIG[preview.alignment].icon), {size: 14, className: ALIGNMENT_CONFIG[preview.alignment].color})}
                                   </div>
                               )}
 

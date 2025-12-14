@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { Card as CardModel, CardType, Language, ElementType, Rarity, AlignmentType } from '../types';
-import { getIconForType, ELEMENT_CONFIG, RARITY_CONFIG, ALIGNMENT_CONFIG } from '../constants';
+import { getIconForType, getIconComponent } from '../utils/iconMap';
+import { ELEMENT_CONFIG, RARITY_CONFIG, ALIGNMENT_CONFIG } from '../constants';
 import { TRANSLATIONS } from '../locales';
 import { Coins, Zap, Sword, Shield, Heart, TrendingUp, Skull, Target, Hexagon, Droplets, Anchor } from 'lucide-react';
 
@@ -90,6 +91,10 @@ export const Card: React.FC<CardProps> = ({ card, onClick, disabled, compact, sh
     ? "觸發 [光之姿態] & [秩序/聖戰] 連擊" 
     : "觸發 [影之姿態] & [混沌/聖戰] 連擊";
 
+  // Helpers for overlays
+  const ElementIcon = getIconComponent(elementConfig.icon);
+  const AlignmentIcon = alignmentConfig ? getIconComponent(alignmentConfig.icon) : null;
+
   return (
     <div 
       className="group relative select-none"
@@ -153,18 +158,18 @@ export const Card: React.FC<CardProps> = ({ card, onClick, disabled, compact, sh
              <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
                  {card.element && card.element !== ElementType.NEUTRAL && (
                     <div className={`p-1 rounded-full bg-black/60 ${elementConfig.color} border border-white/10`} title={elementConfig.name}>
-                        <elementConfig.icon size={compact ? 12 : 14} />
+                        <ElementIcon size={compact ? 12 : 14} />
                     </div>
                  )}
              </div>
 
              {/* Explicit Alignment Badge on Card Face */}
-             {alignmentConfig && (
+             {alignmentConfig && AlignmentIcon && (
                  <div 
                     title={alignmentHint}
                     className={`absolute bottom-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/70 border ${compact ? 'text-[9px]' : 'text-[10px]'} font-bold uppercase tracking-wider ${alignmentConfig.color} border-current z-20 cursor-help hover:scale-110 transition-transform`}
                  >
-                     <alignmentConfig.icon size={compact ? 10 : 10} />
+                     <AlignmentIcon size={compact ? 10 : 10} />
                      <span>{alignmentConfig.name}</span>
                  </div>
              )}

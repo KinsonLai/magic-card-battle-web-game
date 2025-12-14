@@ -1,7 +1,8 @@
 
 import { Card, CardType, NationType, ElementType, AlignmentType, GameEvent, Rarity } from './types';
 import { cardsData } from './cardsData';
-import { Sparkles, Shield, Sword, Factory, Scroll, Zap, Target, Flame, Heart, Skull, Hexagon, Droplets, Wind, Mountain, Sun, Gem, Book, Anchor, Hammer, CloudRain, TrendingUp, TrendingDown, UserMinus, Ghost, Swords, Pickaxe, Glasses, Moon, Ship, Castle, BookOpen, MicOff, Activity, Brain, Coins, Scale, Cross, X, ThermometerSun, Lightbulb, Flag } from 'lucide-react';
+
+// PURE DATA CONSTANTS (Safe for Node.js Server)
 
 export const NATION_CONFIG = {
   [NationType.FIGHTER]: {
@@ -51,16 +52,16 @@ export const NATION_CONFIG = {
 };
 
 export const ELEMENT_CONFIG = {
-  [ElementType.NEUTRAL]: { name: '無屬性', color: 'text-slate-400', bg: 'bg-slate-700', icon: Sparkles },
-  [ElementType.FIRE]: { name: '火', color: 'text-orange-500', bg: 'bg-orange-700', icon: Flame },
-  [ElementType.WATER]: { name: '水', color: 'text-blue-500', bg: 'bg-blue-700', icon: Droplets },
-  [ElementType.EARTH]: { name: '地', color: 'text-amber-600', bg: 'bg-amber-800', icon: Mountain },
-  [ElementType.AIR]: { name: '風', color: 'text-sky-400', bg: 'bg-sky-600', icon: Wind },
+  [ElementType.NEUTRAL]: { name: '無屬性', color: 'text-slate-400', bg: 'bg-slate-700', icon: 'Sparkles' },
+  [ElementType.FIRE]: { name: '火', color: 'text-orange-500', bg: 'bg-orange-700', icon: 'Flame' },
+  [ElementType.WATER]: { name: '水', color: 'text-blue-500', bg: 'bg-blue-700', icon: 'Droplets' },
+  [ElementType.EARTH]: { name: '地', color: 'text-amber-600', bg: 'bg-amber-800', icon: 'Mountain' },
+  [ElementType.AIR]: { name: '風', color: 'text-sky-400', bg: 'bg-sky-600', icon: 'Wind' },
 };
 
 export const ALIGNMENT_CONFIG = {
-    [AlignmentType.HOLY]: { name: '神聖', color: 'text-yellow-200', bg: 'bg-yellow-900/50', icon: Cross },
-    [AlignmentType.EVIL]: { name: '邪惡', color: 'text-purple-300', bg: 'bg-purple-900/50', icon: Ghost },
+    [AlignmentType.HOLY]: { name: '神聖', color: 'text-yellow-200', bg: 'bg-yellow-900/50', icon: 'Cross' },
+    [AlignmentType.EVIL]: { name: '邪惡', color: 'text-purple-300', bg: 'bg-purple-900/50', icon: 'Ghost' },
 };
 
 export const RARITY_CONFIG = {
@@ -154,19 +155,4 @@ export const getRandomCards = (count: number): Card[] => {
     result.push({ ...random, id: `${random.id}_${Math.random().toString(36).substr(2, 9)}` }); 
   }
   return result;
-};
-
-export const getIconForType = (type: CardType) => {
-  switch (type) {
-    case CardType.INDUSTRY: return Factory;
-    case CardType.ATTACK: return Sword;
-    case CardType.MAGIC_ATTACK: return Flame;
-    case CardType.HEAL: return Heart;
-    case CardType.SPECIAL: return Skull;
-    case CardType.CONTRACT: return Scroll;
-    case CardType.RUNE: return Zap;
-    case CardType.RITUAL: return Book;
-    case CardType.ARTIFACT: return Anchor;
-    default: return Sparkles;
-  }
 };
