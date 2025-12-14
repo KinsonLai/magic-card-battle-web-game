@@ -625,7 +625,7 @@ const App: React.FC = () => {
                 <button onClick={() => setActiveTab('log')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'log' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}><History size={14} className="inline mr-2"/> {t.logs}</button>
                 <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'chat' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}><MessageSquare size={14} className="inline mr-2"/> Chat</button>
             </div>
-            {/* FIX: Ensure container allows scrolling by setting min-h-0 and flex structure */}
+            
             {activeTab === 'log' ? (
                 <div className="flex-1 flex flex-col min-h-0">
                     <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
@@ -658,7 +658,6 @@ const App: React.FC = () => {
 
       {/* 2. MAIN AREA: Game Board */}
       <div className="flex-1 h-full flex flex-col relative bg-slate-950 overflow-hidden">
-          {/* ... (Rest of the component remains unchanged, assuming previous content was correct, omitting for brevity to focus on the change request) ... */}
           
           {/* Top Status Bar */}
           <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 z-50 shrink-0">
@@ -846,7 +845,7 @@ const App: React.FC = () => {
 
           {/* Bottom Area: Player Dashboard & Hand */}
           <div className="h-auto min-h-[160px] md:min-h-[300px] bg-slate-900 border-t border-slate-800 flex flex-col z-40 shadow-[0_-20px_60px_rgba(0,0,0,0.5)] shrink-0">
-              {/* ... (Previous code for dashboard stats remains the same) ... */}
+              
               {/* Player Dashboard Stats */}
               <div className="bg-slate-900/50 flex flex-col md:flex-row items-start md:items-center px-4 py-2 gap-4 border-b border-slate-800">
                     <div className="flex w-full md:w-auto items-center gap-4">
@@ -1100,7 +1099,6 @@ const App: React.FC = () => {
           </div>
       )}
 
-      {/* ... (Existing Modals) ... */}
       {/* Guide Modal */}
       {showGuideModal && (
           <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowGuideModal(false)}>
