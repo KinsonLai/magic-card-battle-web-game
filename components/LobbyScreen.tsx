@@ -5,7 +5,7 @@ import { NATION_CONFIG } from '../constants';
 import { DEFAULT_SETTINGS } from '../services/gameEngine';
 import { socketService } from '../services/socketService';
 import { TRANSLATIONS } from '../locales';
-import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, Gem, ShoppingBag, RotateCcw, Shield, Trash2, Globe, Wifi, WifiOff, Loader2, Key, Server, Lock, Unlock, Search, Plus, Eye, EyeOff, LayoutList, LogOut } from 'lucide-react';
+import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, Gem, ShoppingBag, RotateCcw, Shield, Trash2, Globe, Wifi, WifiOff, Loader2, Key, Server, Lock, Unlock, Search, Plus, Eye, EyeOff, LayoutList, LogOut, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: (players: RoomPlayer[], settings: GameSettings, isOnline?: boolean) => void;
@@ -40,6 +40,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const [isCopied, setIsCopied] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false); // Mobile drawer for settings
   
+  // Notification State
+  const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+  
   // User State
   const [myName, setMyName] = useState('玩家 1');
   const [myNation, setMyNation] = useState<NationType>(NationType.FIGHTER);
@@ -55,6 +58,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const getNationName = (key: string) => {
       // @ts-ignore
       return t.nations[key]?.name || NATION_CONFIG[key]?.name || key;
+  };
+
+  const showToast = (message: string, type: 'error' | 'success' = 'error') => {
+      setNotification({ message, type });
+      setTimeout(() => setNotification(null), 3000);
   };
 
   // --- Handlers for Socket Events ---
@@ -101,6 +109,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       } catch (e) {
           console.error("Connection failed", e);
           setIsConnected(false);
+          showToast("無法連接到伺服器", 'error');
       } finally {
           setIsConnecting(false);
       }
@@ -114,7 +123,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   const handleCreateOnlineRoom = () => {
       if (!isConnected) return;
-      if (!newRoomName.trim()) { alert("請輸入房間名稱"); return; }
+      if (!newRoomName.trim()) { 
+          showToast("請輸入房間名稱", 'error'); 
+          return; 
+      }
 
       socketService.createRoom({ 
           player: { name: myName, nation: myNation },
@@ -143,9 +155,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               setShowPasswordModal(null);
           } else {
               if (needsPassword) {
-                  alert("密碼錯誤");
+                  showToast("密碼錯誤", 'error');
               } else {
-                  alert(msg || "加入失敗");
+                  showToast(msg || "加入失敗", 'error');
                   if (msg?.includes('不存在')) refreshRoomList();
               }
           }
@@ -189,7 +201,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   // 1. Online Browser View
   if (mode === 'online' && isConnected && !onlineRoomId) {
       return (
-          <div className="min-h-screen bg-slate-950 flex flex-col p-4 text-white font-sans">
+          <div className="min-h-screen bg-slate-950 flex flex-col p-4 text-white font-sans relative">
+               {/* Notification Toast */}
+               {notification && (
+                   <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 animate-fade-in ${notification.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>
+                       {notification.type === 'error' ? <AlertCircle size={20}/> : <CheckCircle size={20}/>}
+                       {notification.message}
+                   </div>
+               )}
+
                {/* Header */}
                <div className="w-full max-w-6xl mx-auto flex items-center justify-between mb-8">
                   <div className="flex items-center gap-4">
@@ -309,8 +329,16 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   // 2. Waiting Lobby (Local or Online Joined)
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center p-4 text-white font-sans">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center p-4 text-white font-sans relative">
       
+      {/* Notification Toast */}
+      {notification && (
+           <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 animate-fade-in ${notification.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>
+               {notification.type === 'error' ? <AlertCircle size={20}/> : <CheckCircle size={20}/>}
+               {notification.message}
+           </div>
+      )}
+
       {/* Header */}
       <div className="w-full max-w-7xl flex items-center justify-between mb-6 pt-2">
           <div className="flex items-center gap-4">

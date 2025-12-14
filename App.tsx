@@ -14,7 +14,7 @@ import { NATION_CONFIG, ELEMENT_CONFIG, ALIGNMENT_CONFIG, getComplexElementName 
 import { TRANSLATIONS } from './locales';
 import { getIconComponent } from './utils/iconMap';
 import * as Icons from 'lucide-react';
-import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi } from 'lucide-react';
+import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi, AlertCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [screen, setScreen] = useState<'start' | 'lobby' | 'gallery' | 'guide' | 'game' | 'simulation'>('start');
@@ -34,11 +34,19 @@ const App: React.FC = () => {
   const [targetId, setTargetId] = useState<string | null>(null);
   const [animationData, setAnimationData] = useState<{type: 'attack'|'defense'|'repel'|'normal', value: number, msg: string, sourceName?: string, targetName?: string, cardName?: string, comboName?: string} | null>(null);
   const [hoveredCard, setHoveredCard] = useState<{ card: Card, x: number, y: number } | null>(null);
-  const [topNotification, setTopNotification] = useState<{message: string, type: 'event'|'artifact'|'info'} | null>(null);
+  
+  // Notification System
+  const [topNotification, setTopNotification] = useState<{message: string, type: 'event'|'artifact'|'info'|'warning'|'error'} | null>(null);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const t = TRANSLATIONS[lang];
+
+  // Helper to show non-blocking warnings
+  const showWarning = (message: string) => {
+      setTopNotification({ message, type: 'warning' });
+      // Auto clear is handled by effect
+  };
 
   // Socket Integration Hook
   useEffect(() => {
@@ -150,12 +158,19 @@ const App: React.FC = () => {
   useEffect(() => { if (activeTab === 'chat') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.chat, activeTab]);
 
   useEffect(() => {
+      // Sync from game state but prefer local triggers
       if (gameState?.topNotification) {
           setTopNotification(gameState.topNotification);
-          const timer = setTimeout(() => setTopNotification(null), 5000);
-          return () => clearTimeout(timer);
       }
   }, [gameState?.topNotification]);
+
+  // Auto-dismiss notification
+  useEffect(() => {
+      if (topNotification) {
+          const timer = setTimeout(() => setTopNotification(null), 4000);
+          return () => clearTimeout(timer);
+      }
+  }, [topNotification]);
 
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
@@ -360,8 +375,7 @@ const App: React.FC = () => {
           if (currentSelected.length === 0) {
               // First card selection
               if (card.type === CardType.RUNE) {
-                  alert(t.cantUseAlone); // Warn but maybe don't select? Or select and wait for weapon.
-                  // Allow selecting rune first, but execution will fail if no weapon
+                  showWarning(t.cantUseAlone); 
                   canSelect = true; 
               } else {
                   canSelect = true;
@@ -432,7 +446,7 @@ const App: React.FC = () => {
       // Defense Logic
       if (gameState.turnPhase === 'DEFENSE') {
            if (isRuneOnly) {
-              alert(t.cantUseAlone);
+              showWarning(t.cantUseAlone);
               return;
            }
            if (hasAttack || hasMagic || (types.includes(CardType.RUNE) && hasAttack)) {
@@ -452,7 +466,7 @@ const App: React.FC = () => {
       // Attack Logic
       if (hasAttack || hasMagic) {
           if (!targetId) {
-             alert(t.selectTargetHint);
+             showWarning(t.selectTargetHint);
              return;
           }
           if (gameState.isMultiplayer) {
@@ -464,10 +478,10 @@ const App: React.FC = () => {
       // Play Card Logic
       else {
           if (isRuneOnly) {
-              alert(t.cantUseAlone);
+              showWarning(t.cantUseAlone);
               return;
           }
-          if (selectedCards.length > 1) { alert(t.notStackable); return; }
+          if (selectedCards.length > 1) { showWarning(t.notStackable); return; }
           
           if (gameState.isMultiplayer) {
               socketService.emitAction({ type: 'PLAY_CARD', cardId: selectedCardIds[0], targetId: targetId || undefined });
@@ -671,8 +685,13 @@ const App: React.FC = () => {
 
           {/* Top Notification Overlay */}
           {topNotification && (
-              <div className={`absolute top-14 left-0 w-full z-[90] p-2 flex items-center justify-center shadow-lg transition-transform animate-slide-down ${topNotification.type === 'event' ? 'bg-indigo-600' : topNotification.type === 'artifact' ? 'bg-amber-600' : 'bg-slate-700'}`}>
-                  <BellRing size={20} className="mr-2 text-white"/>
+              <div className={`absolute top-14 left-0 w-full z-[90] p-2 flex items-center justify-center shadow-lg transition-transform animate-slide-down 
+                ${topNotification.type === 'event' ? 'bg-indigo-600' : 
+                  topNotification.type === 'artifact' ? 'bg-amber-600' : 
+                  topNotification.type === 'warning' ? 'bg-orange-600' :
+                  topNotification.type === 'error' ? 'bg-red-600' :
+                  'bg-slate-700'}`}>
+                  {topNotification.type === 'warning' || topNotification.type === 'error' ? <AlertCircle size={20} className="mr-2 text-white"/> : <BellRing size={20} className="mr-2 text-white"/>}
                   <span className="font-bold text-white tracking-wide">{topNotification.message}</span>
               </div>
           )}

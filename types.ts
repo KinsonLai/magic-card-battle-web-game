@@ -212,7 +212,7 @@ export interface GameState {
   isDisconnected?: boolean;
   disconnectTime?: number;
   triggeredArtifacts?: string[]; 
-  topNotification?: { message: string, type: 'event' | 'artifact' | 'info' }; 
+  topNotification?: { message: string, type: 'event' | 'artifact' | 'info' | 'warning' | 'error' }; 
   
   // Socket Extra
   roomId?: string;

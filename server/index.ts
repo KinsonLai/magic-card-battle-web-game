@@ -46,8 +46,9 @@ io.on('connection', (socket: Socket) => {
 
     // --- Lobby: Get Room List ---
     socket.on('get_rooms', (callback: (rooms: RoomInfo[]) => void) => {
+        // Filter out private rooms or playing rooms
         const roomList: RoomInfo[] = Object.values(rooms)
-            .filter(r => r.isPublic && !r.state) // Only show public rooms that haven't started
+            .filter(r => r.isPublic && !r.state) 
             .map(r => ({
                 id: r.id,
                 name: r.name,
@@ -58,11 +59,17 @@ io.on('connection', (socket: Socket) => {
                 hostName: r.players.find(p => p.isHost)?.name || 'Unknown',
                 status: r.state ? 'PLAYING' : 'WAITING'
             }));
-        callback(roomList);
+        if (typeof callback === 'function') callback(roomList);
     });
 
     // --- Lobby: Create Room ---
     socket.on('create_room', (data: { player: Partial<RoomPlayer>, roomName: string, password?: string, isPublic: boolean }, callback: (res: any) => void) => {
+        if (!data || !data.player) {
+            console.error("Invalid create_room data:", data);
+            if (typeof callback === 'function') callback({ error: "無效的數據" });
+            return;
+        }
+
         const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
         
         const hostPlayer: RoomPlayer = {
@@ -104,35 +111,46 @@ io.on('connection', (socket: Socket) => {
         currentRoomId = roomId;
         console.log(`Room created: ${roomId} by ${hostPlayer.name}`);
         
-        callback({ roomId });
+        if (typeof callback === 'function') callback({ roomId });
         io.to(roomId).emit('room_update', { players: rooms[roomId].players, hostId: socket.id });
         io.emit('rooms_changed'); // Notify all lobbies to update list
     });
 
     // --- Lobby: Join Room ---
     socket.on('join_room', (data: { roomId: string, player: Partial<RoomPlayer>, password?: string }, callback: (res: any) => void) => {
+        if (!data || !data.roomId || !data.player) {
+             if (typeof callback === 'function') callback({ success: false, message: '無效的請求' });
+             return;
+        }
+
         const { roomId, player, password } = data;
         const room = rooms[roomId];
 
         if (!room) {
-            callback({ success: false, message: '房間不存在' });
+            if (typeof callback === 'function') callback({ success: false, message: '房間不存在' });
             return;
         }
 
         if (room.players.length >= room.settings.maxPlayers) {
-            callback({ success: false, message: '房間已滿' });
+            if (typeof callback === 'function') callback({ success: false, message: '房間已滿' });
             return;
         }
 
         if (room.state) {
-            callback({ success: false, message: '遊戲已經開始' });
+            if (typeof callback === 'function') callback({ success: false, message: '遊戲已經開始' });
             return;
         }
 
         // Password Check
         if (room.password && room.password !== password) {
-            callback({ success: false, message: '密碼錯誤', needsPassword: true });
+            if (typeof callback === 'function') callback({ success: false, message: '密碼錯誤', needsPassword: true });
             return;
+        }
+
+        // Avoid duplicate join
+        if (room.players.find(p => p.id === socket.id)) {
+             if (typeof callback === 'function') callback({ success: true }); // Already joined
+             return;
         }
 
         const newPlayer: RoomPlayer = {
@@ -149,7 +167,7 @@ io.on('connection', (socket: Socket) => {
         socket.join(roomId);
         currentRoomId = roomId;
         
-        callback({ success: true });
+        if (typeof callback === 'function') callback({ success: true });
         
         // Find current host ID to ensure sync
         const currentHost = room.players.find(p => p.isHost);
@@ -296,21 +314,26 @@ io.on('connection', (socket: Socket) => {
             if (wasHost && room.players.length > 0) {
                 room.players[0].isHost = true;
                 io.to(currentRoomId).emit('server_log', `${room.players[0].name} 現在是房主。`);
+                io.to(currentRoomId).emit('room_update', { 
+                    players: room.players, 
+                    hostId: room.players[0].id
+                });
+            } else if (room.players.length > 0) {
+                 // Even if not host, update player list
+                 io.to(currentRoomId).emit('room_update', { 
+                    players: room.players, 
+                    hostId: room.players.find(p => p.isHost)?.id || ''
+                });
             }
             
-            io.to(currentRoomId).emit('room_update', { 
-                players: room.players, 
-                hostId: room.players.find(p => p.isHost)?.id || '' 
-            });
             io.to(currentRoomId).emit('server_log', '有玩家離開了房間。');
             
             // If room empty, delete
             if (room.players.length === 0) {
                 delete rooms[currentRoomId];
                 console.log(`Room ${currentRoomId} deleted`);
-            } else {
-                io.emit('rooms_changed'); // Update room lists counts
             }
+            io.emit('rooms_changed'); // Update room lists counts
         }
     });
 });
