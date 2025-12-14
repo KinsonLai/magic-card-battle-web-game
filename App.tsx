@@ -618,7 +618,7 @@ const App: React.FC = () => {
       `} onClick={() => setShowSidebar(false)}></div>
 
       <div className={`
-          fixed inset-y-0 left-0 z-[60] w-[280px] bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0 lg:z-10 h-full
+          fixed inset-y-0 left-0 z-[60] w-[280px] bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0 lg:z-10 h-[100dvh] overflow-hidden
           ${showSidebar ? 'translate-x-0' : '-translate-x-full'}
       `}>
             <div className="flex border-b border-slate-800 shrink-0">
@@ -658,6 +658,7 @@ const App: React.FC = () => {
 
       {/* 2. MAIN AREA: Game Board */}
       <div className="flex-1 h-full flex flex-col relative bg-slate-950 overflow-hidden">
+          {/* ... (Rest of the component remains unchanged, assuming previous content was correct, omitting for brevity to focus on the change request) ... */}
           
           {/* Top Status Bar */}
           <div className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 z-50 shrink-0">
@@ -845,7 +846,7 @@ const App: React.FC = () => {
 
           {/* Bottom Area: Player Dashboard & Hand */}
           <div className="h-auto min-h-[160px] md:min-h-[300px] bg-slate-900 border-t border-slate-800 flex flex-col z-40 shadow-[0_-20px_60px_rgba(0,0,0,0.5)] shrink-0">
-              
+              {/* ... (Previous code for dashboard stats remains the same) ... */}
               {/* Player Dashboard Stats */}
               <div className="bg-slate-900/50 flex flex-col md:flex-row items-start md:items-center px-4 py-2 gap-4 border-b border-slate-800">
                     <div className="flex w-full md:w-auto items-center gap-4">
@@ -1099,6 +1100,7 @@ const App: React.FC = () => {
           </div>
       )}
 
+      {/* ... (Existing Modals) ... */}
       {/* Guide Modal */}
       {showGuideModal && (
           <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowGuideModal(false)}>
