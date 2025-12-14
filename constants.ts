@@ -3,13 +3,6 @@ import { Card, CardType, NationType, ElementType, AlignmentType, GameEvent, Rari
 import { cardsData } from './cardsData';
 import { Sparkles, Shield, Sword, Factory, Scroll, Zap, Target, Flame, Heart, Skull, Hexagon, Droplets, Wind, Mountain, Sun, Gem, Book, Anchor, Hammer, CloudRain, TrendingUp, TrendingDown, UserMinus, Ghost, Swords, Pickaxe, Glasses, Moon, Ship, Castle, BookOpen, MicOff, Activity, Brain, Coins, Scale, Cross, X, ThermometerSun, Lightbulb, Flag } from 'lucide-react';
 
-// Trained Model Parameters (Normalization Stats)
-export const MODEL_PARAMS = {
-    "mean": [66.84907390427287, 66.73161562442692, 293.9932147441775, 1.382816798092793, 4.7576563359618556, 0.9803777737025491], 
-    "scale": [44.798507243048185, 27.084174132518704, 127.91662333341196, 1.2737650973374413, 2.5393020309374172, 1.1316188564813905], 
-    "nations": ["COMMERCIAL", "FIGHTER", "HOLY", "MAGIC"]
-};
-
 export const NATION_CONFIG = {
   [NationType.FIGHTER]: {
     name: '鬥士之國',

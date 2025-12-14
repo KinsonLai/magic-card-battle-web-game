@@ -218,69 +218,14 @@ export interface ChatMessage {
   isSystem?: boolean;
 }
 
-// --- Data Record for ML Training (Updated) ---
-
-export interface SerializedCard {
-    id: string;
-    name: string;
-    type: string;
-    cost: number;
-    manaCost: number;
-    element?: string;
-    value?: number;
-}
-
-export interface SerializedPlayer {
-    id: string;
-    nation: string;
-    hp: number;
-    maxHp: number;
-    mana: number;
-    gold: number;
-    income: number;
-    soul: number;
-    hand: SerializedCard[];
-    lands: string[]; // Names
-    artifacts: string[]; // Names
-    elementMark: string | null;
-    isDead: boolean;
-}
-
+// Data Record for ML Training
 export interface BattleRecord {
-    gameId: string;
     turn: number;
-    player: string; // Active Player Nation
-    
-    // Rich State (Full Snapshot)
-    state: {
-        turn: number;
-        phase: string;
-        event: string | null;
-        shop: SerializedCard[];
-        players: SerializedPlayer[];
-    };
-
-    // AI MCTS Info
-    policyTarget: { action: string, prob: number }[];
-    valueTarget: number;
+    player: string; // Nation
+    stateVector: number[]; // Simplified numeric representation of state
+    policyTarget: number[]; // Probability distribution over actions (from MCTS)
+    valueTarget: number; // Final game result (-1 or 1)
     actionTaken: string;
-}
-
-// --- AI Model Weights Structure ---
-export interface NeuralNetworkWeights {
-    initial_layer: {
-        0: { weight: number[][], bias: number[] }; // Linear
-        1: { weight: number[], bias: number[] }; // BatchNorm
-    };
-    res_blocks: {
-        0: { fc: { weight: number[][], bias: number[] }, bn: { weight: number[], bias: number[] } };
-        1: { fc: { weight: number[][], bias: number[] }, bn: { weight: number[], bias: number[] } };
-        2: { fc: { weight: number[][], bias: number[] }, bn: { weight: number[], bias: number[] } };
-    };
-    value_head: {
-        0: { weight: number[][], bias: number[] }; // Linear
-        2: { weight: number[][], bias: number[] }; // Linear
-    };
 }
 
 export const MAX_LAND_SIZE = 5;

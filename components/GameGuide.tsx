@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, BookOpen, Shield, Sword, Zap, Flame, Droplets, Mountain, Wind, Skull, ShoppingBag, Clock, Coins, Layers, Target, Sun, Moon, Ghost, Scroll, Scale, Swords, Map, Crown, Sparkles, AlertCircle, ChevronRight, Gem, Hammer, Factory, PlayCircle, Heart, Check, X, Brain } from 'lucide-react';
+import { ArrowLeft, BookOpen, Shield, Sword, Zap, Flame, Droplets, Mountain, Wind, Skull, ShoppingBag, Clock, Coins, Layers, Target, Sun, Moon, Ghost, Scroll, Scale, Swords, Map, Crown, Sparkles, AlertCircle, ChevronRight, Gem, Hammer, Factory, PlayCircle, Heart, Check, X } from 'lucide-react';
 
 interface GameGuideProps {
     onBack: () => void;
 }
 
-type SectionType = 'lore' | 'nations' | 'flow' | 'economy' | 'cards' | 'elements' | 'soul' | 'ai';
+type SectionType = 'lore' | 'nations' | 'flow' | 'economy' | 'cards' | 'elements' | 'soul';
 
 export const GameGuide: React.FC<GameGuideProps> = ({ onBack }) => {
     const [activeSection, setActiveSection] = useState<SectionType>('lore');
@@ -50,7 +50,6 @@ export const GameGuide: React.FC<GameGuideProps> = ({ onBack }) => {
                     <NavItem id="cards" label="卡牌機制" icon={<Layers size={14}/>} />
                     <NavItem id="elements" label="元素反應" icon={<Flame size={14}/>} />
                     <NavItem id="soul" label="靈魂天平" icon={<Scale size={14}/>} />
-                    <NavItem id="ai" label="AI 研究" icon={<Brain size={14}/>} />
                 </div>
             </div>
 
@@ -320,22 +319,6 @@ export const GameGuide: React.FC<GameGuideProps> = ({ onBack }) => {
                                         <li className="flex gap-2"><span className="text-red-400 font-bold flex items-center gap-1"><X size={12}/> 輸:</span> 我方傷害 {'<'} 敵方，承受差額，可能觸發反應。</li>
                                     </ul>
                                 </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* 8. AI Research */}
-                    <section id="section-ai" className="space-y-8">
-                        <SectionHeader title="AI 研究計畫 (AI Research)" icon={<Brain/>} subtitle="與 AI 共舞，探索無限可能。" />
-
-                        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-                            <p className="text-slate-300 text-sm leading-relaxed mb-4">
-                                本遊戲內建先進的 <span className="text-indigo-400 font-bold">MCTS (蒙地卡羅樹搜尋)</span> 演算法，用於驅動電腦玩家的決策。開發者與研究人員可以通過模擬模式收集大量對戰數據，用於訓練深度學習模型。
-                            </p>
-                            <div className="bg-black/30 p-4 rounded-xl border border-white/5 space-y-2 text-xs font-mono text-slate-400">
-                                <div className="flex items-center gap-2"><Check size={12} className="text-green-500"/> 完整狀態記錄 (Full State Logging)</div>
-                                <div className="flex items-center gap-2"><Check size={12} className="text-green-500"/> 策略與價值網絡目標 (Policy & Value Targets)</div>
-                                <div className="flex items-center gap-2"><Check size={12} className="text-green-500"/> 支援 JSON 匯出與 PyTorch 訓練</div>
                             </div>
                         </div>
                     </section>

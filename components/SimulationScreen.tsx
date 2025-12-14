@@ -1,10 +1,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GameState, RoomPlayer, NationType, GameSettings, BattleRecord, Player, Card, SerializedCard, SerializedPlayer } from '../types';
+import { GameState, RoomPlayer, NationType, GameSettings, BattleRecord, Player } from '../types';
 import { createInitialState, DEFAULT_SETTINGS, nextTurn, executeCardEffect, executeAttackAction, buyCard, resolveAttack } from '../services/gameEngine';
-import { runMCTS, loadModelWeights, hasModelLoaded } from '../services/aiAnalysis';
+import { runMCTS } from '../services/aiAnalysis';
 import { NATION_CONFIG } from '../constants';
-import { Play, Pause, Download, ArrowLeft, Brain, Activity, Terminal, Zap, Eye, EyeOff, Skull, Coins, Repeat, Upload } from 'lucide-react';
+import { Play, Pause, Download, ArrowLeft, Brain, Activity, Terminal, Zap, Eye, EyeOff, Skull, Coins, Repeat } from 'lucide-react';
 
 interface SimulationScreenProps {
     onBack: () => void;
@@ -21,7 +21,6 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
     const [maxGames, setMaxGames] = useState(100); // Target games
     const [dataPointCount, setDataPointCount] = useState(0);
     const [winStats, setWinStats] = useState<Record<string, number>>({});
-    const [modelLoaded, setModelLoaded] = useState(false);
 
     // Data Refs (High performance, no re-render)
     const gameStateRef = useRef<GameState | null>(null);
@@ -31,28 +30,12 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
     const speedRef = useRef(500);
     const maxGamesRef = useRef(100);
     const logContainerRef = useRef<HTMLDivElement>(null);
-    const currentGameIdRef = useRef<string>(`game_${Date.now()}`);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Sync Refs
     useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
     useEffect(() => { isHeadlessRef.current = isHeadless; }, [isHeadless]);
     useEffect(() => { speedRef.current = speed; }, [speed]);
     useEffect(() => { maxGamesRef.current = maxGames; }, [maxGames]);
-
-    // Helpers for Serialization
-    const serializeCard = (c: Card): SerializedCard => ({
-        id: c.id, name: c.name, type: c.type, cost: c.cost, manaCost: c.manaCost, element: c.element, value: c.value
-    });
-
-    const serializePlayer = (p: Player): SerializedPlayer => ({
-        id: p.id, nation: p.nation, hp: p.hp, maxHp: p.maxHp, mana: p.mana, gold: p.gold, income: p.income, soul: p.soul,
-        hand: p.hand.map(serializeCard),
-        lands: p.lands.map(l => l.name),
-        artifacts: p.artifacts.map(a => a.name),
-        elementMark: p.elementMark,
-        isDead: p.isDead
-    });
 
     // Init Logic
     const startNewGame = () => {
@@ -67,8 +50,6 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
         const state = createInitialState(bots, settings);
         
         gameStateRef.current = state;
-        currentGameIdRef.current = `game_${Date.now()}_${Math.floor(Math.random()*1000)}`;
-
         if (!isHeadlessRef.current) {
             setDisplayState(state);
             addLog(`--- Game Start ---`);
@@ -87,7 +68,6 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
     // Initialize on load
     useEffect(() => {
         if (!gameStateRef.current) startNewGame();
-        setModelLoaded(hasModelLoaded());
     }, []);
 
     // Auto-scroll logs
@@ -96,24 +76,6 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
             logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
         }
     }, [logs]);
-
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            const content = evt.target?.result as string;
-            const success = loadModelWeights(content);
-            if (success) {
-                setModelLoaded(true);
-                addLog("Neural Network Weights Loaded! AI Brain Upgrade Complete.");
-            } else {
-                addLog("Failed to load weights. Invalid JSON.");
-            }
-        };
-        reader.readAsText(file);
-    };
 
     // Core Loop
     useEffect(() => {
@@ -238,21 +200,14 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
                 const hasChanged = newState && newState !== currentState;
 
                 if (hasChanged && newState) {
-                    // Record Rich Data
+                    // Record Data (Optimized: Push to ref array)
                     const record: BattleRecord = {
-                        gameId: currentGameIdRef.current,
                         turn: currentState.turn,
                         player: actingPlayer.nation,
-                        state: {
-                            turn: currentState.turn,
-                            phase: currentState.turnPhase,
-                            event: currentState.currentEvent?.name || null,
-                            shop: currentState.shopCards.map(serializeCard),
-                            players: currentState.players.map(serializePlayer)
-                        },
-                        policyTarget: debugInfo.policy, 
+                        stateVector: [actingPlayer.hp, actingPlayer.mana, actingPlayer.gold, actingPlayer.soul],
+                        policyTarget: debugInfo.policy.map((p: any) => p.prob),
                         valueTarget: debugInfo.bestScore,
-                        actionTaken: bestAction.type + (bestAction.cardId ? `:${bestAction.cardId}` : '')
+                        actionTaken: bestAction.type
                     };
                     battleRecordsRef.current.push(record);
                     
@@ -313,18 +268,6 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
                 </div>
                 
                 <div className="flex flex-wrap gap-4 items-center justify-end w-full md:w-auto">
-                    {/* Model Loader */}
-                    <div className="flex items-center">
-                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".json" />
-                        <button 
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold transition-all border ${modelLoaded ? 'bg-purple-600/20 text-purple-300 border-purple-500' : 'bg-slate-900 border-slate-700 hover:border-slate-500 text-slate-400'}`}
-                        >
-                            {modelLoaded ? <Brain size={14} className="animate-pulse"/> : <Upload size={14}/>} 
-                            {modelLoaded ? 'BRAIN LOADED' : 'LOAD WEIGHTS'}
-                        </button>
-                    </div>
-
                     {/* Max Games Setting */}
                     <div className="flex items-center gap-2 bg-slate-900 p-2 rounded border border-slate-700">
                         <Repeat size={14} className="text-slate-500"/>
@@ -382,150 +325,4 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
                 <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-4 shadow-xl">
                     <h3 className="font-bold text-slate-400 flex items-center gap-2 border-b border-slate-800 pb-2"><Activity size={16}/> 訓練數據統計</h3>
                     <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-slate-950 p-3 rounded border border-slate-800">
-                            <div className="text-[10px] text-slate-500 uppercase font-bold">Games</div>
-                            <div className="text-2xl font-mono text-white">{gameCount} <span className="text-xs text-slate-500">/ {maxGames}</span></div>
-                            <div className="h-1 bg-slate-800 rounded-full mt-2 overflow-hidden">
-                                <div className="h-full bg-indigo-500 transition-all" style={{width: `${Math.min(100, (gameCount/maxGames)*100)}%`}}></div>
-                            </div>
-                        </div>
-                        <div className="bg-slate-950 p-3 rounded border border-slate-800">
-                            <div className="text-[10px] text-slate-500 uppercase font-bold">Data Points</div>
-                            <div className="text-2xl font-mono text-blue-400">{dataPointCount}</div>
-                        </div>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto custom-scrollbar">
-                        <table className="w-full text-xs">
-                            <thead>
-                                <tr className="text-left text-slate-500 border-b border-slate-800">
-                                    <th className="pb-2 pl-2">Nation</th>
-                                    <th className="pb-2 text-right pr-2">Win %</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {Object.values(NationType).map(n => {
-                                    const idMap: Record<string, string> = {
-                                        [NationType.FIGHTER]: 'AI_Fighter',
-                                        [NationType.HOLY]: 'AI_Holy',
-                                        [NationType.COMMERCIAL]: 'AI_Comm',
-                                        [NationType.MAGIC]: 'AI_Magic'
-                                    };
-                                    const id = idMap[n];
-                                    const wins = winStats[id] || 0;
-                                    const rate = gameCount > 0 ? ((wins / gameCount) * 100).toFixed(1) : '0.0';
-                                    const color = NATION_CONFIG[n].color;
-                                    
-                                    // Calculate bar width
-                                    const width = gameCount > 0 ? (wins / gameCount) * 100 : 0;
-
-                                    return (
-                                        <tr key={n} className="group hover:bg-slate-800/50">
-                                            <td className="py-2 pl-2">
-                                                <div className={`font-bold ${color} mb-1`}>{n}</div>
-                                                <div className="h-1 bg-slate-800 rounded-full overflow-hidden w-full">
-                                                    <div className={`h-full ${color.replace('text-', 'bg-')}`} style={{width: `${width}%`}}></div>
-                                                </div>
-                                            </td>
-                                            <td className="py-2 text-right pr-2 font-mono">
-                                                <div className="text-white">{wins}</div>
-                                                <div className="text-slate-500">{rate}%</div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* Visualizer Area */}
-                <div className="lg:col-span-6 bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden flex flex-col shadow-2xl">
-                    {isHeadless ? (
-                        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-4 animate-pulse">
-                            <Zap size={64} className="text-emerald-500"/>
-                            <div className="text-center">
-                                <h3 className="text-xl font-bold text-white">極速運算中 (Headless Mode)</h3>
-                                <p className="text-sm">畫面渲染已停用以最大化訓練速度</p>
-                                <p className="text-xs font-mono mt-2 text-emerald-400">FPS: UNLIMITED</p>
-                            </div>
-                        </div>
-                    ) : displayState ? (
-                        <div className="flex-1 p-4 relative">
-                            <div className="absolute top-2 right-2 text-xs text-slate-500 font-mono bg-black/50 px-2 py-1 rounded">Turn: {displayState.turn} | Phase: {displayState.turnPhase}</div>
-                            
-                            <div className="flex flex-wrap gap-4 justify-center mt-12">
-                                {displayState.players.map(p => (
-                                    <div key={p.id} className={`w-36 p-3 rounded-xl border flex flex-col gap-2 transition-all ${displayState.currentPlayerIndex === displayState.players.indexOf(p) ? 'scale-105 border-yellow-500 shadow-lg shadow-yellow-900/20 bg-slate-900' : 'border-slate-700 bg-slate-900/50 opacity-80'}`}>
-                                        <div className="flex justify-between items-center">
-                                            <div className={`text-xs font-bold ${NATION_CONFIG[p.nation].color}`}>{p.name}</div>
-                                            {p.isDead && <Skull size={14} className="text-red-600"/>}
-                                        </div>
-                                        
-                                        <div className="space-y-1">
-                                            <div className="flex justify-between text-[9px] text-slate-400">
-                                                <span>HP</span> <span className={p.hp < 30 ? 'text-red-400' : 'text-white'}>{p.hp}/{p.maxHp}</span>
-                                            </div>
-                                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                                <div className="h-full bg-red-500 transition-all duration-300" style={{width: `${Math.max(0, (p.hp/p.maxHp)*100)}%`}}></div>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 text-[10px] text-slate-400 gap-y-1 bg-black/20 p-2 rounded">
-                                            <div className="flex items-center gap-1"><Zap size={10} className="text-blue-400"/> {p.mana}</div>
-                                            <div className="flex items-center gap-1"><Coins size={10} className="text-yellow-400"/> {p.gold}</div>
-                                            <div className="col-span-2 mt-1 pt-1 border-t border-white/10 flex justify-between">
-                                                <span>Soul: <span className={p.soul > 0 ? 'text-yellow-400' : p.soul < 0 ? 'text-purple-400' : 'text-slate-400'}>{p.soul}</span></span>
-                                                <span>Hand: {p.hand.length}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Center Event */}
-                            <div className="mt-12 text-center min-h-[80px] flex items-center justify-center">
-                                {displayState.lastAction && (
-                                    <div className="inline-block bg-slate-900/80 backdrop-blur px-6 py-3 rounded-2xl border border-slate-700 animate-bounce-in shadow-xl">
-                                        <div className="text-[10px] text-slate-500 mb-1 font-bold tracking-widest uppercase">Last Action</div>
-                                        <div className="text-white font-bold text-sm flex items-center gap-2 justify-center">
-                                            {displayState.lastAction.type} 
-                                            {displayState.lastAction.totalValue ? <span className="text-yellow-400 font-mono text-lg">{displayState.lastAction.totalValue}</span> : ''}
-                                        </div>
-                                        {displayState.lastAction.comboName && (
-                                            <div className="text-xs text-indigo-300 mt-1 font-bold animate-pulse">{displayState.lastAction.comboName}</div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-slate-600 gap-4">
-                            <Brain size={48} className="opacity-20"/>
-                            <p>Press START to initialize simulation</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Logs */}
-                <div className="lg:col-span-3 bg-black border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-xl">
-                    <div className="p-3 bg-slate-900 border-b border-slate-800 font-bold text-xs text-slate-400 flex items-center justify-between">
-                        <div className="flex items-center gap-2"><Terminal size={14}/> SYSTEM LOGS</div>
-                        {isHeadless && <span className="text-[10px] text-yellow-500 flex items-center gap-1"><EyeOff size={10}/> HIDDEN</span>}
-                    </div>
-                    <div ref={logContainerRef} className="flex-1 overflow-y-auto p-3 font-mono text-[10px] space-y-1.5 text-slate-300 scroll-smooth">
-                        {logs.length === 0 && <span className="text-slate-700 italic">...waiting for logs...</span>}
-                        {logs.map((l, i) => (
-                            <div key={i} className="border-b border-slate-900/50 pb-0.5 break-words hover:bg-slate-900/30 transition-colors">
-                                <span className="text-slate-600 mr-2">[{i+1}]</span>
-                                {l}
-                            </div>
-                        ))}
-                        <div className="h-4"></div> {/* Spacer for auto-scroll */}
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    );
-};
+                        <div className="bg-slate-950 p-3 rounded border border-

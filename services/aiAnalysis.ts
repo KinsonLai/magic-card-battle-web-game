@@ -1,7 +1,7 @@
 
-import { GameState, Player, Card, CardType, ElementType, ActionEvent, BattleRecord, NeuralNetworkWeights } from '../types';
+import { GameState, Player, Card, CardType, ElementType, ActionEvent, BattleRecord } from '../types';
 import { executeCardEffect, executeAttackAction, nextTurn, buyCard, resolveAttack } from './gameEngine';
-import { getComplexElementName, ELEMENT_CONFIG, MODEL_PARAMS } from '../constants';
+import { getComplexElementName, ELEMENT_CONFIG } from '../constants';
 
 // --- Types for Internal Logic ---
 
@@ -26,67 +26,7 @@ interface MCTSNode {
     playerIndex: number;
 }
 
-// --- NEURAL NETWORK INFERENCE ENGINE ---
-
-let loadedWeights: NeuralNetworkWeights | null = null;
-
-export const loadModelWeights = (json: string) => {
-    try {
-        loadedWeights = JSON.parse(json);
-        console.log("AI Model Weights Loaded Successfully!");
-        return true;
-    } catch (e) {
-        console.error("Failed to load model weights:", e);
-        return false;
-    }
-};
-
-export const hasModelLoaded = () => !!loadedWeights;
-
-// Simple Matrix Math Helpers
-const matMul = (input: number[], weight: number[][], bias: number[]): number[] => {
-    const output = new Array(weight.length).fill(0);
-    for (let i = 0; i < weight.length; i++) {
-        let sum = 0;
-        for (let j = 0; j < input.length; j++) {
-            sum += input[j] * weight[i][j];
-        }
-        output[i] = sum + bias[i];
-    }
-    return output;
-};
-
-const relu = (input: number[]): number[] => input.map(x => Math.max(0, x));
-const tanh = (input: number[]): number[] => input.map(x => Math.tanh(x));
-
-// Forward Pass
-const predictValue = (input: number[]): number => {
-    if (!loadedWeights) return 0;
-    
-    // Initial Layer
-    let x = matMul(input, loadedWeights.initial_layer[0].weight, loadedWeights.initial_layer[0].bias);
-    // Skip BatchNorm math for simplicity in browser (assume eval mode merges or effect is minor for demo)
-    x = relu(x);
-
-    // ResBlocks (Simplified: just FC + Relu + Residual)
-    const blocks = [loadedWeights.res_blocks[0], loadedWeights.res_blocks[1], loadedWeights.res_blocks[2]];
-    for (const block of blocks) {
-        const residual = [...x];
-        let out = matMul(x, block.fc.weight, block.fc.bias);
-        out = relu(out);
-        // Add residual
-        for(let i=0; i<x.length; i++) x[i] = out[i] + residual[i];
-    }
-
-    // Value Head
-    x = matMul(x, loadedWeights.value_head[0].weight, loadedWeights.value_head[0].bias);
-    x = relu(x);
-    const final = matMul(x, loadedWeights.value_head[2].weight, loadedWeights.value_head[2].bias);
-    
-    return Math.tanh(final[0]);
-};
-
-// --- 1. VALUE NETWORK (Heuristic + Neural) ---
+// --- 1. VALUE NETWORK (Heuristic Approximation) ---
 export const evaluateState = (state: GameState, perspectivePlayerId: string): number => {
     const p = state.players.find(pl => pl.id === perspectivePlayerId);
     if (!p) return -1; 
@@ -96,44 +36,30 @@ export const evaluateState = (state: GameState, perspectivePlayerId: string): nu
     const aliveEnemies = state.players.filter(pl => pl.id !== perspectivePlayerId && !pl.isDead);
     if (aliveEnemies.length === 0) return 1; // Win
 
-    // --- NEURAL EVALUATION ---
-    if (loadedWeights) {
-        // Prepare Input Vector [HP, Mana, Gold, Soul, HandSize, LandsCount, ...NationOneHot]
-        // Normalize using MODEL_PARAMS
-        const raw = [
-            p.hp, p.mana, p.gold, p.soul, p.hand.length, p.lands.length
-        ];
-        
-        const normalized = raw.map((val, i) => (val - MODEL_PARAMS.mean[i]) / MODEL_PARAMS.scale[i]);
-        
-        // One Hot Nation
-        const nationOrder = MODEL_PARAMS.nations;
-        const nationVec = nationOrder.map(n => n === p.nation ? 1 : 0);
-        
-        const inputVector = [...normalized, ...nationVec];
-        
-        return predictValue(inputVector);
-    }
-
-    // --- FALLBACK HEURISTIC ---
+    // --- Heuristic Tuning for Aggression ---
     
     // 1. HP Gap (Most important)
     const avgEnemyHp = aliveEnemies.reduce((sum, e) => sum + e.hp, 0) / aliveEnemies.length;
     const hpDiff = p.hp - avgEnemyHp;
-    const hpScore = (hpDiff / 100) * 0.8; 
+    const hpScore = (hpDiff / 100) * 0.8; // High weight on having more HP than enemies
 
     // 2. Resource Hoarding Penalty
-    const manaScore = Math.min(1, p.mana / 100) * 0.1;
-    const goldScore = Math.min(1, p.gold / 500) * 0.1;
+    // If we have tons of mana/gold but aren't winning, that's bad.
+    // We want to spend resources to gain advantage.
+    const manaScore = Math.min(1, p.mana / 100) * 0.1; // Low weight
+    const goldScore = Math.min(1, p.gold / 500) * 0.1; // Low weight
     
-    // 3. Board Presence
+    // 3. Board Presence (Income/Assets)
     const incomeScore = (p.income + p.lands.reduce((sum, l) => sum + (l.value || 0), 0)) / 100 * 0.4;
     const artifactScore = p.artifacts.length * 0.1;
     
+    // 4. Inaction Penalty (Implicit)
+    // We punish states where turn count is high but enemies are healthy
     const stalematePenalty = (state.turn > 20 && avgEnemyHp > 80) ? -0.3 : 0;
 
     let totalScore = hpScore + incomeScore + manaScore + goldScore + artifactScore + stalematePenalty;
     
+    // Normalize roughly to [-1, 1]
     return Math.max(-1, Math.min(1, totalScore));
 };
 
