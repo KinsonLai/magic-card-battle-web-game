@@ -1,4 +1,5 @@
 
+import React from 'react';
 import * as Icons from 'lucide-react';
 import { CardType } from '../types';
 
@@ -27,5 +28,3 @@ export const getIconForType = (type: CardType) => {
     default: return Icons.Sparkles;
   }
 };
-
-import React from 'react';

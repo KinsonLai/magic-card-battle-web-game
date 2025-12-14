@@ -1,10 +1,9 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GameState, RoomPlayer, NationType, GameSettings, BattleRecord, Player } from '../types';
 import { createInitialState, DEFAULT_SETTINGS, nextTurn, executeCardEffect, executeAttackAction, buyCard, resolveAttack } from '../services/gameEngine';
 import { runMCTS } from '../services/aiAnalysis';
-import { NATION_CONFIG } from '../constants';
-import { Play, Pause, Download, ArrowLeft, Brain, Activity, Terminal, Zap, Eye, EyeOff, Skull, Coins, Repeat } from 'lucide-react';
+import { Play, Pause, Download, ArrowLeft, Brain, Activity, Terminal, Zap, Eye, Repeat } from 'lucide-react';
 
 interface SimulationScreenProps {
     onBack: () => void;

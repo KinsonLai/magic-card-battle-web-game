@@ -5,7 +5,7 @@ import { NATION_CONFIG } from '../constants';
 import { DEFAULT_SETTINGS } from '../services/gameEngine';
 import { socketService } from '../services/socketService';
 import { TRANSLATIONS } from '../locales';
-import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Send, Trash2, Shield, Bot, User, Copy, Share2, Play, Gem, ShoppingBag, RotateCcw, Sliders, Check, Globe, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, Gem, ShoppingBag, RotateCcw, Shield, Trash2, Globe, Wifi, WifiOff, Loader2, Key, Server } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: (players: RoomPlayer[], settings: GameSettings, isOnline?: boolean) => void;
@@ -14,10 +14,13 @@ interface LobbyScreenProps {
 }
 
 export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang }) => {
-  const t = TRANSLATIONS['zh-TW']; 
+  const t = TRANSLATIONS[lang] || TRANSLATIONS['zh-TW']; 
   const [mode, setMode] = useState<'local' | 'online'>('local');
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [showServerSettings, setShowServerSettings] = useState(false);
+  
+  // Default to localhost for dev, but could be window.location.origin in prod
   const [serverUrl, setServerUrl] = useState('http://localhost:3000');
   const [roomIdInput, setRoomIdInput] = useState('');
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
@@ -41,15 +44,17 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Helper for safe translation
+  const getNationName = (key: string) => {
+      // @ts-ignore
+      return t.nations[key]?.name || NATION_CONFIG[key]?.name || key;
+  };
+
   // Handle Socket Events for Online Mode
   useEffect(() => {
       if (mode === 'online' && isConnected) {
           socketService.onRoomUpdate((updatedPlayers, hostId) => {
               setPlayers(updatedPlayers);
-              // Check if I am host based on socket ID
-              const myId = socketService.getId();
-              // Logic to update local knowledge of who is host if needed, 
-              // though updatedPlayers should contain isHost flag
           });
 
           return () => {
@@ -57,6 +62,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
           }
       }
   }, [mode, isConnected]);
+
+  // Auto Connect when switching to Online Mode
+  useEffect(() => {
+      if (mode === 'online' && !isConnected && !isConnecting) {
+          handleConnect();
+      }
+  }, [mode]);
 
   // Sync my local changes to player list (Local Mode Only)
   useEffect(() => {
@@ -76,7 +88,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
           await socketService.connect(serverUrl);
           setIsConnected(true);
       } catch (e) {
-          alert("無法連接伺服器，請確認伺服器已啟動。");
+          console.error("Connection failed", e);
           setIsConnected(false);
       } finally {
           setIsConnecting(false);
@@ -106,29 +118,13 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const handleStartGame = () => {
       if (mode === 'online') {
           socketService.startGame();
-          // Game start trigger comes from socket listener in App.tsx usually, 
-          // or we can optimistic start here but waiting for server is safer.
-          // App.tsx handles 'game_start' event.
       } else {
           onStart(players, settings, false);
       }
   };
 
-  const handleSendMessage = (e?: React.FormEvent) => {
-      e?.preventDefault();
-      if (!inputMsg.trim()) return;
-      // Local chat
-      const newMsg: ChatMessage = {
-          id: Date.now().toString(),
-          sender: myName,
-          text: inputMsg
-      };
-      setChatMessages([...chatMessages, newMsg]);
-      setInputMsg('');
-  };
-
   const handleAddBot = () => {
-      if (mode === 'online') return; // Bots not supported in online lobby setup here (server handles it usually)
+      if (mode === 'online') return;
       if (players.length >= settings.maxPlayers) return;
       const botId = `bot_${Date.now()}`;
       const botNames = ['電腦甲', '電腦乙', '電腦丙', '電腦丁', '電腦戊'];
@@ -148,7 +144,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   };
 
   const handleKick = (playerId: string) => {
-      if (mode === 'online') return; // Not implemented for socket demo
+      if (mode === 'online') return; 
       setPlayers(players.filter(p => p.id !== playerId));
   };
 
@@ -197,7 +193,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                 <h1 className="text-2xl font-bold cinzel text-slate-100">準備大廳</h1>
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                     <span className={`px-2 py-0.5 rounded border border-slate-700 font-mono tracking-wider ${mode === 'online' && isConnected ? 'bg-green-900/30 text-green-400' : 'bg-slate-800'}`}>
-                        {mode === 'online' ? (onlineRoomId || '未加入') : 'LOCAL'}
+                        {mode === 'online' ? (onlineRoomId || 'LOBBY') : 'LOCAL'}
                     </span>
                 </div>
             </div>
@@ -211,7 +207,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                   <Bot size={16}/> 單機 / AI
               </button>
               <button 
-                onClick={() => { setMode('online'); setPlayers([]); }}
+                onClick={() => { setMode('online'); setPlayers([]); setShowServerSettings(false); }}
                 className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${mode === 'online' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
               >
                   <Globe size={16}/> 線上連線
@@ -226,72 +222,112 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               
               {/* Online Connection Panel */}
               {mode === 'online' && !onlineRoomId && (
-                  <div className="p-8 flex flex-col items-center justify-center h-full space-y-6">
+                  <div className="p-8 flex flex-col items-center justify-center h-full space-y-8 animate-fade-in">
+                      
+                      {/* Connection Status */}
                       <div className="text-center space-y-2">
                           <h2 className="text-2xl font-bold flex items-center justify-center gap-2">
-                              {isConnected ? <Wifi className="text-green-500"/> : <WifiOff className="text-slate-500"/>}
-                              {isConnected ? '已連線至伺服器' : '連接至對戰伺服器'}
+                              {isConnecting ? <Loader2 className="animate-spin text-yellow-500"/> : isConnected ? <Wifi className="text-green-500"/> : <WifiOff className="text-red-500"/>}
+                              {isConnecting ? '正在連接伺服器...' : isConnected ? '已連線至對戰伺服器' : '無法連接至伺服器'}
                           </h2>
-                          <p className="text-slate-400 text-sm">請輸入 Socket.IO 伺服器地址 (預設 localhost:3000)</p>
+                          {!isConnected && !isConnecting && <p className="text-red-400 text-sm">請檢查伺服器是否已啟動，或嘗試手動設定網址。</p>}
                       </div>
 
-                      {!isConnected ? (
-                          <div className="flex gap-2 w-full max-w-md">
-                              <input 
-                                value={serverUrl} 
-                                onChange={(e) => setServerUrl(e.target.value)}
-                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 outline-none focus:border-indigo-500 font-mono text-sm"
-                              />
-                              <button 
-                                onClick={handleConnect}
-                                disabled={isConnecting}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50"
-                              >
-                                  {isConnecting && <Loader2 size={16} className="animate-spin"/>} 連線
-                              </button>
-                          </div>
-                      ) : (
-                          <div className="w-full max-w-md space-y-4 animate-fade-in-up">
-                              <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                                  <label className="text-xs text-slate-500 font-bold mb-2 block">你的資訊</label>
-                                  <div className="flex gap-4 items-center">
+                      {/* Main Actions (Only when connected) */}
+                      {isConnected && (
+                          <div className="w-full max-w-md space-y-6">
+                              
+                              {/* My Profile Preview */}
+                              <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex gap-4 items-end">
+                                  <div className="flex-1">
+                                      <label className="text-xs text-slate-500 font-bold mb-1 block">你的暱稱</label>
                                       <input 
                                           value={myName}
                                           onChange={e => setMyName(e.target.value)}
-                                          className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 flex-1 text-sm"
+                                          className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-indigo-500 outline-none"
                                           placeholder="輸入暱稱"
                                       />
+                                  </div>
+                                  <div className="flex-1">
+                                      <label className="text-xs text-slate-500 font-bold mb-1 block">選擇勢力</label>
                                       <select 
                                           value={myNation}
                                           onChange={e => setMyNation(e.target.value as NationType)}
-                                          className="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm"
+                                          className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm focus:border-indigo-500 outline-none"
                                       >
                                           {Object.entries(NATION_CONFIG).map(([k, v]) => (
-                                              // @ts-ignore
-                                              <option key={k} value={k}>{t.nations[k].name}</option>
+                                              <option key={k} value={k}>{getNationName(k)}</option>
                                           ))}
                                       </select>
                                   </div>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-4">
-                                  <button onClick={handleCreateOnlineRoom} className="p-4 bg-emerald-600/20 border border-emerald-500/50 hover:bg-emerald-600/30 rounded-xl flex flex-col items-center gap-2 transition-all">
-                                      <Crown size={32} className="text-emerald-400"/>
-                                      <span className="font-bold text-emerald-100">建立房間</span>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Create Room Button */}
+                                  <button 
+                                    onClick={handleCreateOnlineRoom} 
+                                    className="p-6 bg-gradient-to-br from-emerald-600/20 to-teal-600/20 border border-emerald-500/50 hover:bg-emerald-600/30 rounded-2xl flex flex-col items-center justify-center gap-3 transition-all group"
+                                  >
+                                      <div className="p-3 bg-emerald-500/20 rounded-full group-hover:scale-110 transition-transform">
+                                        <Crown size={32} className="text-emerald-400"/>
+                                      </div>
+                                      <span className="font-bold text-lg text-emerald-100">建立房間 (Create)</span>
+                                      <span className="text-xs text-emerald-300/60">生成一組新的房間代碼</span>
                                   </button>
-                                  <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl flex flex-col gap-2">
-                                      <span className="text-xs font-bold text-slate-400 text-center">加入房間</span>
-                                      <div className="flex gap-2">
+
+                                  {/* Join Room Input */}
+                                  <div className="p-6 bg-slate-800/30 border border-slate-700 rounded-2xl flex flex-col gap-3">
+                                      <div className="flex items-center gap-2 text-slate-300 font-bold justify-center">
+                                          <Key size={18} /> 加入房間 (Join)
+                                      </div>
+                                      <div className="flex gap-2 mt-2">
                                           <input 
                                               value={roomIdInput}
-                                              onChange={e => setRoomIdInput(e.target.value)}
-                                              placeholder="Room ID"
-                                              className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-center font-mono text-sm"
+                                              onChange={e => setRoomIdInput(e.target.value.toUpperCase())}
+                                              placeholder="輸入代碼 (CODE)"
+                                              className="w-full bg-slate-950 border border-slate-600 rounded-lg px-3 py-2 text-center font-mono text-sm tracking-widest uppercase focus:border-indigo-500 outline-none"
+                                              maxLength={6}
                                           />
-                                          <button onClick={handleJoinOnlineRoom} className="bg-indigo-600 hover:bg-indigo-500 p-1.5 rounded text-white"><ArrowLeft size={16} className="rotate-180"/></button>
+                                          <button 
+                                            onClick={handleJoinOnlineRoom} 
+                                            disabled={!roomIdInput}
+                                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed p-2 rounded-lg text-white transition-colors"
+                                          >
+                                              <ArrowLeft size={20} className="rotate-180"/>
+                                          </button>
                                       </div>
                                   </div>
                               </div>
+                          </div>
+                      )}
+
+                      {/* Retry / Server Settings Toggle */}
+                      {!isConnected && !isConnecting && (
+                          <div className="w-full max-w-md flex flex-col items-center gap-4">
+                              <button 
+                                onClick={handleConnect}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg hover:shadow-indigo-500/30 transition-all"
+                              >
+                                  <RotateCcw size={16}/> 重試連線
+                              </button>
+                              
+                              <button onClick={() => setShowServerSettings(!showServerSettings)} className="text-xs text-slate-500 hover:text-slate-300 underline flex items-center gap-1">
+                                  <Server size={12}/> 伺服器設定
+                              </button>
+
+                              {showServerSettings && (
+                                  <div className="w-full bg-slate-950 border border-slate-800 p-4 rounded-lg animate-fade-in-up">
+                                      <label className="text-xs text-slate-500 font-bold mb-1 block">Socket.IO Server URL</label>
+                                      <div className="flex gap-2">
+                                          <input 
+                                              value={serverUrl} 
+                                              onChange={(e) => setServerUrl(e.target.value)}
+                                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs font-mono text-slate-300"
+                                          />
+                                          <button onClick={handleConnect} className="text-xs bg-slate-800 px-3 py-1 rounded border border-slate-700 hover:bg-slate-700">Save & Connect</button>
+                                      </div>
+                                  </div>
+                              )}
                           </div>
                       )}
                   </div>
@@ -303,9 +339,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                   <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
                       <h3 className="font-bold flex items-center gap-2"><Users size={18}/> 玩家列表 ({players.length}/{settings.maxPlayers})</h3>
                       {mode === 'online' && (
-                          <div className="flex items-center gap-2 bg-indigo-900/30 px-3 py-1 rounded-full border border-indigo-500/30">
-                              <span className="text-xs text-indigo-300 font-bold">ROOM: {onlineRoomId}</span>
-                              <button onClick={handleShare} className="text-indigo-400 hover:text-white"><Copy size={12}/></button>
+                          <div className="flex items-center gap-3">
+                              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Room Code:</span>
+                              <div className="flex items-center gap-2 bg-indigo-500/20 px-4 py-1.5 rounded-lg border border-indigo-500/50 shadow-[0_0_10px_rgba(99,102,241,0.2)]">
+                                  <span className="text-lg font-mono font-black text-indigo-300 tracking-[0.15em]">{onlineRoomId}</span>
+                                  <button onClick={handleShare} className="text-indigo-400 hover:text-white p-1 hover:bg-indigo-500/20 rounded transition-colors" title="複製代碼">
+                                      {isCopied ? <span className="text-green-400 text-xs font-bold">COPIED</span> : <Copy size={16}/>}
+                                  </button>
+                              </div>
                           </div>
                       )}
                   </div>
@@ -339,14 +380,12 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                 className="bg-slate-900 text-xs font-bold uppercase tracking-wider rounded border border-slate-700 px-1 py-0.5 outline-none focus:border-indigo-500 mt-1"
                                              >
                                                 {Object.entries(NATION_CONFIG).map(([k, v]) => (
-                                                    // @ts-ignore
-                                                    <option key={k} value={k}>{t.nations[k].name}</option>
+                                                    <option key={k} value={k}>{getNationName(k)}</option>
                                                 ))}
                                              </select>
                                           ) : (
                                             <div className={`text-xs ${nationConfig.color} font-bold uppercase tracking-wider mt-1`}>
-                                                {/* @ts-ignore */}
-                                                {t.nations[player.nation].name}
+                                                {getNationName(player.nation)}
                                             </div>
                                           )}
                                       </div>
@@ -432,8 +471,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                         className={`p-2 rounded border text-xs text-left transition-all ${myNation === key ? `${config.bgColor} ${config.borderColor} shadow-lg` : 'bg-slate-950 border-slate-800 hover:bg-slate-800'}`}
                                      >
                                          <div className={`font-bold ${config.color}`}>
-                                             {/* @ts-ignore */}
-                                             {t.nations[key].name}
+                                             {getNationName(key)}
                                          </div>
                                      </button>
                                  ))}
