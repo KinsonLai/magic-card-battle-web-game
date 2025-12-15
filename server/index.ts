@@ -252,29 +252,46 @@ io.on('connection', (socket: Socket) => {
     });
 
     // --- Game: Start ---
-    socket.on('start_game', () => {
-        if (!currentRoomId || !rooms[currentRoomId]) return;
+    socket.on('start_game', (callback: (res: any) => void) => {
+        if (!currentRoomId || !rooms[currentRoomId]) {
+            if (typeof callback === 'function') callback({ success: false, message: '房間不存在' });
+            return;
+        }
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
         
-        if (!player || !player.isHost) return;
+        if (!player || !player.isHost) {
+            if (typeof callback === 'function') callback({ success: false, message: '權限不足' });
+            return;
+        }
+
+        // Force Host Ready (fixes edge case where host toggled ready off)
+        player.isReady = true;
 
         // Check if all players are ready
-        const allReady = room.players.every(p => p.isReady);
-        if (!allReady) {
-            // Optional: Emit error to host
+        const unreadyPlayers = room.players.filter(p => !p.isReady);
+        if (unreadyPlayers.length > 0) {
+            const names = unreadyPlayers.map(p => p.name).join(', ');
+            if (typeof callback === 'function') callback({ success: false, message: `等待玩家準備: ${names}` });
             return; 
         }
 
-        const initialState = createInitialState(room.players, room.settings);
-        initialState.isMultiplayer = true;
-        initialState.roomId = currentRoomId;
-        
-        room.state = initialState;
-        
-        io.to(currentRoomId).emit('game_start', initialState);
-        io.to(currentRoomId).emit('server_log', '遊戲開始！');
-        io.emit('rooms_changed');
+        try {
+            const initialState = createInitialState(room.players, room.settings);
+            initialState.isMultiplayer = true;
+            initialState.roomId = currentRoomId;
+            
+            room.state = initialState;
+            
+            io.to(currentRoomId).emit('game_start', initialState);
+            io.to(currentRoomId).emit('server_log', '遊戲開始！');
+            io.emit('rooms_changed');
+            
+            if (typeof callback === 'function') callback({ success: true });
+        } catch (e) {
+            console.error("Start Game Error:", e);
+            if (typeof callback === 'function') callback({ success: false, message: '伺服器內部錯誤' });
+        }
     });
 
     // --- Game: Actions ---

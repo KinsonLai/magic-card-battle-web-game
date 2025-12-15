@@ -85,8 +85,10 @@ class SocketService {
       this.socket?.on('settings_update', callback);
   }
 
-  public startGame() {
-    this.socket?.emit('start_game');
+  public startGame(callback?: (res: {success: boolean, message?: string}) => void) {
+    this.socket?.emit('start_game', (response: any) => {
+        if (callback) callback(response);
+    });
   }
 
   public onRoomUpdate(callback: (players: RoomPlayer[], hostId: string) => void) {

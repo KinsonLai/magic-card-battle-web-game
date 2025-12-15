@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, RoomPlayer, NationType, GameSettings, BattleRecord, Player } from '../types';
 import { createInitialState, DEFAULT_SETTINGS, nextTurn, executeCardEffect, executeAttackAction, buyCard, resolveAttack } from '../services/gameEngine';
@@ -339,7 +338,7 @@ export const SimulationScreen: React.FC<SimulationScreenProps> = ({ onBack }) =>
                         {Object.entries(winStats).map(([id, wins]) => (
                             <div key={id} className="flex justify-between text-xs mb-1">
                                 <span>{id}</span>
-                                <span className="font-mono text-green-400">{((wins / Math.max(1, gameCount)) * 100).toFixed(1)}%</span>
+                                <span className="font-mono text-green-400">{((Number(wins) / Math.max(1, gameCount)) * 100).toFixed(1)}%</span>
                             </div>
                         ))}
                     </div>

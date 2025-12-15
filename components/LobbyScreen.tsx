@@ -5,7 +5,7 @@ import { NATION_CONFIG } from '../constants';
 import { DEFAULT_SETTINGS } from '../services/gameEngine';
 import { socketService } from '../services/socketService';
 import { TRANSLATIONS } from '../locales';
-import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Wifi, WifiOff, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check } from 'lucide-react';
+import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Wifi, WifiOff, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check, X } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: (players: RoomPlayer[], settings: GameSettings, isOnline?: boolean) => void;
@@ -27,6 +27,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   // Modals & Inputs
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState<string | null>(null); 
+  const [showNationModal, setShowNationModal] = useState(false); // New Nation Selector
   const [passwordInput, setPasswordInput] = useState('');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [newRoomName, setNewRoomName] = useState('');
@@ -37,6 +38,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
   const [roomCode] = useState(Math.random().toString(36).substring(2, 8).toUpperCase());
   const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+  const [isStarting, setIsStarting] = useState(false); // New loading state for start button
   
   const [myName, setMyName] = useState('Player 1');
   const [myNation, setMyNation] = useState<NationType>(NationType.FIGHTER);
@@ -245,7 +247,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               showToast("還有玩家未準備", 'error');
               return;
           }
-          socketService.startGame();
+          setIsStarting(true);
+          socketService.startGame((res) => {
+              if (!res.success) {
+                  showToast(res.message || "無法開始遊戲", 'error');
+                  setIsStarting(false);
+              }
+              // If success, socketService.onGameStart will trigger and component will unmount/switch
+          });
       } else {
           onStart(players, settings, false);
       }
@@ -365,9 +374,21 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                         <div className="text-xs text-slate-500">Rank: Novice</div>
                                     </div>
                                 </div>
-                                <select value={myNation} onChange={e => setMyNation(e.target.value as any)} className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-300 outline-none cursor-pointer hover:border-slate-500">
-                                    {Object.keys(NATION_CONFIG).map(k => <option key={k} value={k}>{getNationName(k)}</option>)}
-                                </select>
+                                
+                                {/* New Visual Nation Selector Trigger */}
+                                <div 
+                                    onClick={() => setShowNationModal(true)}
+                                    className="w-full bg-slate-950 border border-slate-700 hover:border-slate-500 rounded-xl p-3 cursor-pointer transition-all group relative overflow-hidden"
+                                >
+                                    <div className={`absolute inset-0 opacity-10 ${NATION_CONFIG[myNation].bgColor}`}></div>
+                                    <div className="relative flex justify-between items-center">
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-slate-500 uppercase font-bold">Selected Nation</span>
+                                            <span className={`font-bold ${NATION_CONFIG[myNation].color}`}>{getNationName(myNation)}</span>
+                                        </div>
+                                        <ChevronRight size={16} className="text-slate-500 group-hover:text-white transition-colors"/>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Join Code */}
@@ -449,17 +470,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
                                                     <div className="flex justify-between items-end z-10 pt-2">
                                                         {((mode === 'local' && amIHost) || (mode === 'online' && isMe)) ? (
-                                                            <div className="flex gap-2">
-                                                                <select 
-                                                                    value={player.nation} 
-                                                                    onChange={(e) => {
-                                                                        if(mode === 'local') setPlayers(prev => prev.map(p => p.id === player.id ? {...p, nation: e.target.value as any} : p));
-                                                                        if(mode === 'online' && isMe) setMyNation(e.target.value as any); 
-                                                                    }}
-                                                                    className="bg-black/40 border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 outline-none hover:border-white/30 cursor-pointer"
+                                                            <div className="flex gap-2 items-center">
+                                                                {/* Only show modal trigger if in room view and it's me */}
+                                                                <button 
+                                                                    onClick={() => setShowNationModal(true)}
+                                                                    className="bg-black/40 border border-white/10 rounded px-2 py-1 text-[10px] text-slate-300 hover:border-white/30 hover:text-white flex items-center gap-1 transition-colors"
                                                                 >
-                                                                    {Object.keys(NATION_CONFIG).map(k => <option key={k} value={k}>{getNationName(k)}</option>)}
-                                                                </select>
+                                                                    <Settings size={10}/> Change Nation
+                                                                </button>
+                                                                
                                                                 {player.isBot && amIHost && mode === 'local' && (
                                                                     <select 
                                                                         value={player.botDifficulty} 
@@ -525,11 +544,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                 {amIHost ? (
                                     <button 
                                         onClick={handleStartGame} 
-                                        disabled={players.length < 2 || (mode === 'online' && !allReady)} 
-                                        className={`w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-3 transform transition-all hover:scale-[1.02] active:scale-95 text-lg ${(players.length < 2 || (mode === 'online' && !allReady)) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
+                                        disabled={(mode === 'online' && !allReady) || isStarting || players.length < 2} 
+                                        className={`w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 flex items-center justify-center gap-3 transform transition-all hover:scale-[1.02] active:scale-95 text-lg ${((mode === 'online' && !allReady) || isStarting || players.length < 2) ? 'opacity-50 cursor-not-allowed grayscale' : ''}`}
                                     >
-                                        <Play size={20} fill="currentColor"/> 
-                                        {mode === 'online' && !allReady ? '等待全員準備...' : '開始遊戲'}
+                                        {isStarting ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Play size={20} fill="currentColor"/>} 
+                                        {mode === 'online' && !allReady ? '等待全員準備...' : isStarting ? '啟動中...' : '開始遊戲'}
                                     </button>
                                 ) : (
                                     <button 
@@ -552,7 +571,93 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
             </div>
         </div>
 
-        {/* --- Modals --- */}
+        {/* --- MODALS --- */}
+        
+        {/* Nation Selector Modal (New Visual Design) */}
+        {showNationModal && (
+            <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowNationModal(false)}>
+                <div className="bg-slate-900/90 border border-slate-700 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                    {/* Modal Header */}
+                    <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
+                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                            <Globe className="text-indigo-500"/> 選擇你的國度
+                        </h2>
+                        <button onClick={() => setShowNationModal(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                            <X size={24}/>
+                        </button>
+                    </div>
+
+                    {/* Nation Grid */}
+                    <div className="flex-1 overflow-y-auto p-6 bg-slate-950">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {Object.entries(NATION_CONFIG).map(([key, config]) => {
+                                const isSelected = myNation === key;
+                                const nKey = key as NationType;
+                                
+                                return (
+                                    <div 
+                                        key={key} 
+                                        onClick={() => {
+                                            setMyNation(nKey);
+                                            if (mode === 'local') {
+                                                // Sync update to player list in local mode immediately
+                                                setPlayers(prev => prev.map(p => p.id === 'host_user' ? { ...p, nation: nKey } : p));
+                                            }
+                                            setShowNationModal(false);
+                                        }}
+                                        className={`relative group rounded-2xl border-2 transition-all cursor-pointer overflow-hidden flex flex-col ${isSelected ? `border-white ${config.bgColor} scale-[1.02] shadow-2xl` : 'border-slate-800 bg-slate-900/50 hover:border-slate-600 hover:bg-slate-900'}`}
+                                    >
+                                        {isSelected && (
+                                            <div className="absolute top-3 right-3 bg-white text-black rounded-full p-1 shadow-lg z-10">
+                                                <Check size={16} strokeWidth={4}/>
+                                            </div>
+                                        )}
+                                        
+                                        <div className="p-6 flex gap-5 items-start">
+                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 shadow-lg border-2 ${isSelected ? 'border-white bg-black/20' : 'border-slate-700 bg-slate-800'} ${config.color}`}>
+                                                {nKey === NationType.FIGHTER && <Crown size={32}/>}
+                                                {nKey === NationType.HOLY && <Users size={32}/>}
+                                                {nKey === NationType.COMMERCIAL && <TrendingUp size={32}/>}
+                                                {nKey === NationType.MAGIC && <Zap size={32}/>}
+                                            </div>
+                                            <div>
+                                                <h3 className={`text-xl font-bold mb-1 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{config.name}</h3>
+                                                <p className={`text-xs leading-relaxed ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>{config.description}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Stats Bar */}
+                                        <div className="mt-auto bg-black/20 p-4 border-t border-white/5 flex justify-between text-xs font-mono">
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className={`${config.hpBonus > 0 ? 'text-green-400' : config.hpBonus < 0 ? 'text-red-400' : 'text-slate-500'} font-bold`}>
+                                                    {config.hpBonus > 0 ? '+' : ''}{config.hpBonus}
+                                                </span>
+                                                <span className="text-[10px] uppercase text-slate-500">HP</span>
+                                            </div>
+                                            <div className="w-px h-8 bg-white/10"></div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className={`${config.manaBonus > 0 ? 'text-blue-400' : 'text-slate-500'} font-bold`}>
+                                                    {config.manaBonus > 0 ? '+' : ''}{config.manaBonus}
+                                                </span>
+                                                <span className="text-[10px] uppercase text-slate-500">Mana</span>
+                                            </div>
+                                            <div className="w-px h-8 bg-white/10"></div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className={`${config.goldBonus > 0 ? 'text-yellow-400' : 'text-slate-500'} font-bold`}>
+                                                    {config.goldBonus > 0 ? '+' : ''}{config.goldBonus}
+                                                </span>
+                                                <span className="text-[10px] uppercase text-slate-500">Gold</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {showCreateModal && (
             <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
                 <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-fade-in-up" onClick={e => e.stopPropagation()}>
