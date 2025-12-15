@@ -139,12 +139,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       setOnlineRoomId(null);
   };
 
-  const switchToOnline = () => {
-      setMode('online');
-      setView('browser');
-      handleConnect();
-  };
-
   const handleCreateOnlineRoom = () => {
       if (!isConnected) return;
       if (!newRoomName.trim()) { showToast("請輸入房間名稱", 'error'); return; }

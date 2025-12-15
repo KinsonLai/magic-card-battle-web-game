@@ -179,9 +179,7 @@ io.on('connection', (socket: Socket) => {
         
         if (player) {
             player.isReady = !player.isReady;
-            // Host is usually effectively ready, but let's allow them to toggle too if they want
-            // Or enforce Host is always ready. Let's allow toggle for clarity.
-            
+            // Notify room
             const currentHost = room.players.find(p => p.isHost);
             io.to(currentRoomId).emit('room_update', { players: room.players, hostId: currentHost?.id || room.players[0].id });
         }
