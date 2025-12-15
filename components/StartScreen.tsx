@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../locales';
-import { Swords, Image, Sparkles, HelpCircle, Brain, Code, User } from 'lucide-react';
+import { Swords, Image, Sparkles, HelpCircle, User } from 'lucide-react';
 
 interface StartScreenProps {
   onHost: () => void;
@@ -11,7 +11,7 @@ interface StartScreenProps {
   setLang: (l: Language) => void;
   onGuide: () => void;
   onSim: () => void;
-  onAdmin: () => void; // New prop
+  onAdmin: () => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lang, onGuide, onSim, onAdmin }) => {
@@ -96,23 +96,15 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
                     <span className="text-sm font-bold text-slate-300 group-hover:text-white">指南</span>
                 </button>
             </div>
-
-            <button 
-                onClick={onAdmin} // Changed from onSim to onAdmin trigger logic (Admin login)
-                className="w-full py-3 rounded-xl bg-slate-900/50 border border-slate-800 text-slate-600 hover:text-red-400 hover:border-red-500/30 transition-all text-[10px] font-mono tracking-widest flex items-center justify-center gap-2"
-            >
-                <Code size={12}/> ADMIN_PANEL
-            </button>
         </div>
       </div>
       
       {/* Footer */}
       <div className="absolute bottom-6 flex flex-col items-center gap-2 text-slate-600">
           <div className="flex items-center gap-2 text-xs font-medium opacity-60">
-              <Code size={12}/>
-              <span>Created by <span className="text-slate-400 font-bold">KinsonLai</span></span>
+              <span className="text-slate-400">Created by KinsonLai</span>
           </div>
-          <div className="text-[10px] font-mono opacity-40">v2.1.0 | Mobile Enhanced</div>
+          <div className="text-[10px] font-mono opacity-40">v2.1.1</div>
       </div>
     </div>
   );

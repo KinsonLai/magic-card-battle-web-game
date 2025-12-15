@@ -51,6 +51,7 @@ io.on('connection', (socket: Socket) => {
 
     // --- Admin: Login ---
     socket.on('admin_login', (data: { user: string, passHash: string }, callback: (success: boolean) => void) => {
+        // Compare hash (Client sends SHA256 of input)
         if (data.user === 'admin' && data.passHash === ADMIN_HASH) {
             isAdmin = true;
             socket.join('admin_channel');
@@ -84,7 +85,17 @@ io.on('connection', (socket: Socket) => {
             delete rooms[roomId];
             io.emit('rooms_changed');
             // Update admin list
-            const allRooms = Object.values(rooms); // Map again...
+            const allRooms = Object.values(rooms).map(r => ({
+                id: r.id,
+                name: r.name,
+                playerCount: r.players.length,
+                maxPlayers: r.settings.maxPlayers,
+                isPublic: r.isPublic,
+                hasPassword: !!r.password,
+                hostName: r.players.find(p => p.isHost)?.name || 'Unknown',
+                status: r.state ? 'PLAYING' : 'WAITING',
+                settings: r.settings
+            }));
             io.to('admin_channel').emit('admin_room_list', allRooms); 
         }
     });
@@ -330,12 +341,14 @@ io.on('connection', (socket: Socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
-        if (!player || !player.isHost) return;
+        // Only host or admin can change others/bots, but users can change themselves
+        const isSelf = targetId === socket.id;
+        if (!isSelf && !player?.isHost && !player?.isAdmin) return;
 
         const target = room.players.find(p => p.id === targetId);
         if (target) {
             target.nation = nation;
-            io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
+            io.to(currentRoomId).emit('room_update', { players: room.players, hostId: room.players.find(p => p.isHost)?.id || '' });
         }
     });
 
@@ -528,6 +541,11 @@ io.on('connection', (socket: Socket) => {
             io.emit('rooms_changed');
         }
     });
+});
+
+// SPA Fallback: Send index.html for any other requests (fixes /admin route)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;

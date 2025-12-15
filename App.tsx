@@ -61,6 +61,18 @@ const App: React.FC = () => {
       setTopNotification({ message, type: 'warning' });
   };
 
+  // --- Route Check for Admin ---
+  useEffect(() => {
+      const checkRoute = () => {
+          if (window.location.pathname === '/admin') {
+              setShowAdminLogin(true);
+          }
+      };
+      checkRoute();
+      window.addEventListener('popstate', checkRoute);
+      return () => window.removeEventListener('popstate', checkRoute);
+  }, []);
+
   // Socket Integration Hook
   useEffect(() => {
       console.log("Registering Socket Listeners...");
@@ -73,15 +85,11 @@ const App: React.FC = () => {
 
       const cleanupUpdate = socketService.onStateUpdate((newState) => {
           setGameState({ ...newState, isMultiplayer: true });
-          // Reset selections on update to prevent stale data
-          // BUT: Don't clear if we are in the middle of a replace selection or shop viewing? 
-          // Safe to clear basic selection
           setSelectedCardIds([]);
           setTargetId(null);
-          // If action was processed, clear notification quickly if it was a repel/play
           if (newState.lastAction && newState.lastAction.timestamp > (gameState?.lastAction?.timestamp || 0)) {
               if (newState.lastAction.type === 'REPEL') {
-                  setTimeout(() => setAnimationData(null), 1500); // Clear animation faster
+                  setTimeout(() => setAnimationData(null), 1500); 
               }
           }
       });
@@ -168,8 +176,8 @@ const App: React.FC = () => {
   const preview = getPreviewStats();
 
   // --- Effects ---
-  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.gameLog]);
-  useEffect(() => { if (activeTab === 'chat') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.chat, activeTab]);
+  useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.gameLog, showSidebar]);
+  useEffect(() => { if (activeTab === 'chat') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.chat, activeTab, showSidebar]);
 
   useEffect(() => {
       if (gameState?.topNotification) {
@@ -185,7 +193,6 @@ const App: React.FC = () => {
   }, [topNotification]);
 
   useEffect(() => {
-      // Auto-hide animation after delay, but respect manual clears
       if (animationData) {
           const timer = setTimeout(() => setAnimationData(null), 2500);
           return () => clearTimeout(timer);
@@ -214,9 +221,7 @@ const App: React.FC = () => {
                      const enemies = newState.players.filter(p => p.id !== currentPlayer.id && !p.isDead);
                      let target = enemies[Math.floor(Math.random() * enemies.length)];
                      
-                     // Simple AI Logic for replacement: just replace random or don't play if full
                      if (card.type === CardType.INDUSTRY && currentPlayer.lands.length >= MAX_LAND_SIZE) {
-                         // AI just replaces 0 index for simplicity in local loop
                          newState = replaceLand(newState, card.id, 0);
                      } else {
                          if (card.type === CardType.ATTACK || card.type === CardType.MAGIC_ATTACK) {
@@ -322,14 +327,13 @@ const App: React.FC = () => {
               setShowAdminPanel(true);
               setAdminPass('');
           } else {
-              alert('Login Failed');
+              alert('Login Failed (密碼錯誤或伺服器未響應)');
           }
       });
   };
 
   const handleStartGame = (players: RoomPlayer[], settings: GameSettings, isOnline: boolean = false) => {
     if (isOnline) {
-        // Just wait for socket event
     } else {
         setGameState(createInitialState(players, settings));
         setScreen('game');
@@ -444,7 +448,6 @@ const App: React.FC = () => {
       const selectedCards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
       if (selectedCards.length === 0) return;
 
-      // Special Check: Land Full
       if (selectedCards[0].type === CardType.INDUSTRY && humanPlayer.lands.length >= MAX_LAND_SIZE) {
           setShowReplaceModal(selectedCards[0].id);
           return;
@@ -575,12 +578,12 @@ const App: React.FC = () => {
             {showAdminLogin && (
                 <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
                     <form onSubmit={handleAdminLoginSubmit} className="bg-slate-900 border border-indigo-500 rounded-xl p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl shadow-indigo-900/50">
-                        <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Terminal size={20}/> ADMIN ACCESS</h2>
+                        <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Terminal size={20}/> 管理員登入</h2>
                         <input value={adminUser} onChange={e=>setAdminUser(e.target.value)} placeholder="Username" className="bg-black/50 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"/>
                         <input value={adminPass} onChange={e=>setAdminPass(e.target.value)} type="password" placeholder="Password" className="bg-black/50 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"/>
                         <div className="flex gap-2">
-                            <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded hover:bg-slate-700">CANCEL</button>
-                            <button type="submit" className="flex-1 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-500 font-bold">LOGIN</button>
+                            <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded hover:bg-slate-700">取消</button>
+                            <button type="submit" className="flex-1 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-500 font-bold">登入</button>
                         </div>
                     </form>
                 </div>
@@ -614,321 +617,397 @@ const App: React.FC = () => {
   const totalCost = selectedCards.reduce((sum, c) => sum + c.manaCost, 0);
   const totalHpCost = selectedCards.reduce((sum, c) => sum + (c.hpCost || 0), 0) + (preview?.hpCost || 0);
   const isRuneOnly = selectedCards.length > 0 && selectedCards.every(c => c.type === CardType.RUNE);
-  
   const canAffordMana = humanPlayer.mana >= totalCost;
   const canAffordHp = humanPlayer.hp > totalHpCost;
   const canAfford = canAffordMana && canAffordHp;
-
-  const landIncome = humanPlayer.lands.reduce((sum, l) => sum + (l.value || 0), 0) * gameState.settings.incomeMultiplier;
-  let totalIncome = humanPlayer.income + landIncome;
-  if (gameState.currentEvent?.globalModifier?.incomeMultiplier !== undefined) totalIncome *= gameState.currentEvent.globalModifier.incomeMultiplier;
-  
-  // @ts-ignore
-  const EventIcon = gameState.currentEvent ? getIconComponent(gameState.currentEvent.icon) : Icons.Zap;
 
   // Active Card for Inspector
   const activeCard = selectedCardIds.length > 0 ? selectedCards[selectedCards.length - 1] : null;
   const shopActiveCard = gameState.shopCards.find(c => c.id === shopSelectedCardId);
 
-  // Inspector Player
+  // Inspector Player (Mobile specific, or desktop sidebar)
   const inspectedPlayer = inspectPlayerId ? gameState.players.find(p => p.id === inspectPlayerId) : null;
 
+  // @ts-ignore
+  const EventIcon = gameState.currentEvent ? getIconComponent(gameState.currentEvent.icon) : Icons.Zap;
+
   return (
-    <div className="h-[100dvh] w-screen bg-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30 overflow-hidden flex flex-col relative">
+    <div className="h-[100dvh] w-screen bg-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30 overflow-hidden flex flex-col relative md:flex-row">
       
       {/* Debug Console Overlay */}
       {showDebug && <DebugConsole gameState={gameState} setGameState={setGameState} onClose={() => setShowDebug(false)} />}
 
-      {/* 1. TOP BAR */}
-      <div className="h-16 bg-gradient-to-b from-slate-900 to-slate-900/0 px-4 flex items-center justify-between z-30 shrink-0">
-          <div className="flex items-center gap-3">
-              <button onClick={() => setShowQuitModal(true)} className="p-2 bg-slate-800/50 rounded-full text-slate-400 hover:text-white border border-white/5"><Power size={16}/></button>
-              
-              <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Turn {gameState.turn}</span>
-                      {gameState.currentEvent && (
-                          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${gameState.currentEvent.type === 'DISASTER' ? 'bg-red-900/80 text-red-100' : 'bg-yellow-900/80 text-yellow-100'}`}>
-                              <EventIcon size={10} /> {gameState.currentEvent.name}
-                          </div>
-                      )}
-                  </div>
-                  <div className={`font-bold text-sm flex items-center gap-2 ${currentPlayer.id === humanPlayer.id ? 'text-green-400' : 'text-slate-300'}`}>
-                      {currentPlayer.name} {currentPlayer.id === humanPlayer.id ? '(You)' : ''}
-                  </div>
+      {/* --- DESKTOP LEFT SIDEBAR (Log & Stats) --- */}
+      <div className="hidden md:flex w-64 bg-slate-900 border-r border-slate-800 flex-col shrink-0 z-20">
+          <div className="p-4 border-b border-slate-800 bg-slate-950">
+              <h1 className="text-lg font-bold text-white mb-2 cinzel">魔法對戰</h1>
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span className="bg-slate-800 px-2 py-0.5 rounded">Turn {gameState.turn}</span>
+                  {gameState.currentEvent && <span className="bg-red-900/50 text-red-200 px-2 py-0.5 rounded flex items-center gap-1"><EventIcon size={10}/> {gameState.currentEvent.name}</span>}
               </div>
           </div>
-
-          <div className="flex items-center gap-2">
-              <button onClick={() => setShowShop(true)} className="flex flex-col items-center justify-center w-10 h-10 bg-indigo-600 rounded-full shadow-lg border border-indigo-400 active:scale-95 transition-transform">
-                  <ShoppingBag size={18} className="text-white"/>
-              </button>
-              <button onClick={handleEndTurn} disabled={!isHumanTurn} className={`flex flex-col items-center justify-center w-12 h-12 rounded-full shadow-lg border-2 active:scale-95 transition-all ${isHumanTurn ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>
-                  <ChevronDown size={24}/>
-              </button>
+          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">戰鬥紀錄</div>
+              {gameState.gameLog.map(log => (
+                  <div key={log.id} className="text-xs text-slate-300 border-l-2 border-slate-700 pl-2 py-1">
+                      {log.message}
+                  </div>
+              ))}
+              <div ref={logEndRef} />
+          </div>
+          {/* Desktop Player Stats */}
+          <div className="p-4 bg-slate-900 border-t border-slate-800">
+              <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${NATION_CONFIG[humanPlayer.nation].bgColor} ${NATION_CONFIG[humanPlayer.nation].borderColor}`}>
+                      <User className="text-white" size={20}/>
+                  </div>
+                  <div>
+                      <div className="font-bold text-white text-sm">{humanPlayer.name}</div>
+                      <div className="text-[10px] text-slate-400">{NATION_CONFIG[humanPlayer.nation].name}</div>
+                  </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="bg-slate-800 rounded p-1"><div className="text-red-400 font-bold">{humanPlayer.hp}</div><div className="text-[10px] text-slate-500">HP</div></div>
+                  <div className="bg-slate-800 rounded p-1"><div className="text-blue-400 font-bold">{humanPlayer.mana}</div><div className="text-[10px] text-slate-500">MP</div></div>
+                  <div className="bg-slate-800 rounded p-1"><div className="text-yellow-400 font-bold">{humanPlayer.gold}</div><div className="text-[10px] text-slate-500">G</div></div>
+              </div>
           </div>
       </div>
 
-      {/* Top Notification Overlay */}
-      {topNotification && (
-          <div className={`absolute top-16 left-0 right-0 z-[60] mx-4 p-3 rounded-xl shadow-2xl transition-transform animate-slide-down flex items-start gap-3 border ${topNotification.type === 'error' ? 'bg-red-950/90 border-red-500' : 'bg-slate-800/90 border-slate-600'}`}>
-              <BellRing size={20} className={topNotification.type === 'error' ? 'text-red-400' : 'text-indigo-400'}/>
-              <span className="text-sm font-bold text-white">{topNotification.message}</span>
-          </div>
-      )}
-
-      {/* 2. MIDDLE ARENA (Opponents - Horizontal Scroll Avatars) */}
-      <div className="flex-1 relative overflow-hidden flex flex-col justify-start pt-2 pb-20">
-            {/* Background */}
-            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-950 to-black pointer-events-none"></div>
-
-            {/* Opponent List - Horizontal Avatars */}
-            <div className="w-full overflow-x-auto overflow-y-hidden flex items-center gap-4 px-4 py-2 scrollbar-hide min-h-[120px] snap-x snap-mandatory z-10">
-                {gameState.players.filter(p => p.id !== humanPlayer.id).map(opp => (
-                    <div 
-                        key={opp.id} 
-                        onClick={() => canPlay && setTargetId(opp.id)} 
-                        className={`relative group shrink-0 snap-center flex flex-col items-center transition-all ${targetId === opp.id ? 'scale-110' : 'opacity-80'}`}
-                    >
-                        {/* Avatar Circle */}
-                        <div className={`w-16 h-16 rounded-full border-2 flex items-center justify-center bg-slate-900 shadow-xl relative overflow-hidden ${targetId === opp.id ? 'border-red-500 ring-4 ring-red-500/20' : 'border-slate-600'}`}>
-                            {opp.isDead ? <Skull size={32} className="text-slate-600"/> : <User size={32} className="text-slate-400"/>}
-                            {/* Status Icons */}
-                            <div className="absolute top-0 right-0 flex flex-col gap-0.5">
-                                {opp.isStunned && <div className="w-4 h-4 bg-black rounded-full flex items-center justify-center border border-yellow-500"><Zap size={10} className="text-yellow-500"/></div>}
-                                {opp.elementMark && (
-                                    <div className="w-4 h-4 bg-black rounded-full flex items-center justify-center border border-white">
-                                        {/* @ts-ignore */}
-                                        {ELEMENT_CONFIG[opp.elementMark] && React.createElement(getIconComponent(ELEMENT_CONFIG[opp.elementMark].icon), {size: 8, className: ELEMENT_CONFIG[opp.elementMark].color})}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        
-                        {/* Name & HP */}
-                        <div className="mt-2 flex flex-col items-center gap-1">
-                            <span className="text-[10px] font-bold text-slate-300 bg-black/40 px-2 py-0.5 rounded-full truncate max-w-[80px]">{opp.name}</span>
-                            <div className="w-12 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-red-500 transition-all" style={{ width: `${Math.min(100, (opp.hp/opp.maxHp)*100)}%` }}></div>
-                            </div>
-                        </div>
-
-                        {targetId === opp.id && <div className="absolute -top-2 bg-red-600 text-white rounded-full p-1 shadow-lg animate-bounce z-20"><Crosshair size={12}/></div>}
-                        
-                        {/* Inspect Button */}
-                        <button onClick={(e) => {e.stopPropagation(); setInspectPlayerId(opp.id);}} className="absolute bottom-5 right-0 bg-slate-800 rounded-full p-1 border border-slate-600 hover:text-white text-slate-400 hover:bg-slate-700 z-30">
-                            <Eye size={12}/>
-                        </button>
-                    </div>
-                ))}
-            </div>
-
-            {/* Animation Overlay */}
-            {animationData && (
-                <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none bg-black/20 backdrop-blur-[1px]">
-                     <div className={`p-6 rounded-2xl border-2 backdrop-blur-md flex flex-col items-center gap-2 animate-fade-in-up ${animationData.type === 'attack' ? 'bg-red-900/80 border-red-500' : animationData.type === 'defense' ? 'bg-blue-900/80 border-blue-500' : 'bg-slate-800/80 border-slate-500'}`}>
-                         <div className="text-4xl">{animationData.type === 'attack' ? '⚔️' : '🛡️'}</div>
-                         <div className="text-2xl font-black text-white drop-shadow-md">{animationData.cardName}</div>
-                         {animationData.value > 0 && <div className="text-3xl font-mono text-yellow-300 font-bold">{animationData.value}</div>}
-                         <div className="text-sm opacity-80 bg-black/30 px-2 rounded">{animationData.msg}</div>
-                     </div>
-                </div>
-            )}
-            
-            {/* Context Messages */}
-            <div className="mt-auto px-6 pb-4 flex justify-center pointer-events-none z-10">
-                {isHumanTurn && !amIBeingAttacked && !selectedCardIds.length && (
-                    <div className="bg-emerald-900/80 text-emerald-100 px-4 py-2 rounded-full text-xs font-bold shadow-lg border border-emerald-500/30 animate-pulse">
-                        你的回合
-                    </div>
-                )}
-                {amIBeingAttacked && (
-                    <div className="bg-red-900/90 text-white px-6 py-3 rounded-2xl text-center shadow-2xl border border-red-500 animate-pulse pointer-events-auto">
-                        <div className="text-xs font-bold uppercase text-red-300 mb-1">敵方攻擊</div>
-                        <div className="text-3xl font-black font-mono">{gameState.pendingAttack?.damage}</div>
-                        <div className="text-[10px] mt-1 opacity-80">請選擇對應攻擊卡反擊</div>
-                        <button onClick={handleSkipDefense} className="mt-2 text-xs underline opacity-60 hover:opacity-100">直接承受</button>
-                    </div>
-                )}
-            </div>
-      </div>
-
-      {/* 3. PLAYER DASHBOARD & HAND (Fixed Bottom) */}
-      <div className="bg-slate-900 border-t border-slate-800 relative z-50 pb-safe">
+      {/* --- MAIN AREA --- */}
+      <div className="flex-1 flex flex-col relative overflow-hidden h-full">
           
-          {/* Active Card Inspector (Slide Up Panel) */}
-          <div className={`
-              absolute bottom-full left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out z-20 flex flex-col
-              ${activeCard ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}
-          `} style={{ maxHeight: '60vh' }}>
-              
-              {activeCard && (
-                  <div className="p-5 flex flex-col gap-4">
-                      {/* Header info */}
-                      <div className="flex justify-between items-start">
-                          <div>
-                              <h3 className="text-xl font-bold text-white leading-none">{t.cards[activeCard.id]?.name || activeCard.name}</h3>
-                              <div className="flex gap-2 mt-2">
-                                  {/* @ts-ignore */}
-                                  <span className="text-[10px] uppercase font-bold tracking-wider bg-slate-800 px-2 py-0.5 rounded text-slate-400">{t.types[activeCard.type]}</span>
-                                  {activeCard.element && activeCard.element !== ElementType.NEUTRAL && (
-                                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${ELEMENT_CONFIG[activeCard.element].color} bg-slate-800`}>
-                                          {ELEMENT_CONFIG[activeCard.element].name}
-                                      </span>
-                                  )}
-                              </div>
-                          </div>
-                          <div className="text-right">
-                              <div className="text-2xl font-mono font-bold text-blue-400">{activeCard.manaCost} <span className="text-xs text-slate-500">MP</span></div>
-                              {activeCard.cost > 0 && <div className="text-xs text-yellow-500 font-mono">{activeCard.cost} G</div>}
-                          </div>
-                      </div>
-
-                      {/* Description */}
-                      <div className="bg-black/30 p-3 rounded-xl border border-white/5 text-sm text-slate-300 leading-relaxed max-h-24 overflow-y-auto">
-                          {/* @ts-ignore */}
-                          {t.cards[activeCard.id]?.desc || activeCard.description}
-                          {/* Combo Hint */}
-                          {preview?.comboName && (
-                              <div className="mt-2 pt-2 border-t border-white/10 text-yellow-300 font-bold text-xs flex items-center gap-1">
-                                  <Sparkles size={12}/> 連擊: {preview.comboName} {preview.reactionBonusText && `(${preview.reactionBonusText})`}
-                              </div>
-                          )}
-                      </div>
-
-                      {/* Action Button */}
-                      <div className="flex gap-3">
-                          <button onClick={() => setSelectedCardIds([])} className="px-4 py-3 bg-slate-800 rounded-xl font-bold text-slate-400">取消</button>
-                          
-                          {/* Sell Button if single card */}
-                          {isHumanTurn && selectedCardIds.length === 1 && (
-                              <button onClick={handleSell} className="px-4 py-3 bg-yellow-900/30 text-yellow-500 rounded-xl font-bold border border-yellow-700/50 flex flex-col items-center justify-center leading-none min-w-[80px]">
-                                  <span className="text-xs">出售</span>
-                                  <span className="text-[10px] opacity-70">+{Math.floor(activeCard.cost/2)}G</span>
-                              </button>
-                          )}
-
-                          <button 
-                              onClick={executePlay}
-                              disabled={!isHumanTurn && !amIBeingAttacked}
-                              className={`flex-1 py-3 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2
-                                  ${isHumanTurn || amIBeingAttacked ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}
-                              `}
-                          >
-                              {amIBeingAttacked ? '反擊!' : '出牌'}
-                              {preview && preview.damage > 0 && <span className="bg-black/20 px-2 py-0.5 rounded text-sm font-mono">{preview.damage} DMG</span>}
-                          </button>
-                      </div>
-                  </div>
-              )}
+          {/* MOBILE HEADER */}
+          <div className="md:hidden h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shrink-0">
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setShowQuitModal(true)} className="p-1.5 bg-slate-800 rounded text-slate-400"><Power size={14}/></button>
+                  <span className="text-xs font-bold text-slate-300">Turn {gameState.turn}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                  <button onClick={() => setShowShop(true)} className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white"><ShoppingBag size={14}/></button>
+                  <button onClick={handleEndTurn} disabled={!isHumanTurn} className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${isHumanTurn ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}><ChevronDown size={20}/></button>
+              </div>
           </div>
 
-          {/* Stats Bar (Compact) + Mobile Tab Switcher */}
-          <div className="px-4 py-2 flex items-center justify-between border-b border-slate-800 bg-slate-950 relative z-30">
-              <div className="flex gap-3">
-                  <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">HP</span>
-                      <div className="text-sm font-bold text-white flex items-center gap-1">
-                          <Heart size={12} className="text-red-500"/> {humanPlayer.hp}
-                      </div>
-                  </div>
-                  <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">MP</span>
-                      <div className="text-sm font-bold text-white flex items-center gap-1">
-                          <Zap size={12} className="text-blue-500"/> {humanPlayer.mana}
-                      </div>
-                  </div>
-                  <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">Gold</span>
-                      <div className="text-sm font-bold text-white flex items-center gap-1">
-                          <Coins size={12} className="text-yellow-500"/> {humanPlayer.gold}
-                      </div>
-                  </div>
+          {/* Top Notification Overlay */}
+          {topNotification && (
+              <div className={`absolute top-16 left-0 right-0 z-[60] mx-4 p-3 rounded-xl shadow-2xl transition-transform animate-slide-down flex items-start gap-3 border ${topNotification.type === 'error' ? 'bg-red-950/90 border-red-500' : 'bg-slate-800/90 border-slate-600'}`}>
+                  <BellRing size={20} className={topNotification.type === 'error' ? 'text-red-400' : 'text-indigo-400'}/>
+                  <span className="text-sm font-bold text-white">{topNotification.message}</span>
               </div>
+          )}
+
+          {/* MIDDLE ARENA */}
+          <div className="flex-1 relative overflow-y-auto overflow-x-hidden flex flex-col md:p-8">
+                {/* Background */}
+                <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-950 to-black pointer-events-none"></div>
+
+                {/* --- DESKTOP OPPONENT GRID --- */}
+                <div className="hidden md:grid grid-cols-3 gap-6 w-full max-w-5xl mx-auto mb-auto">
+                    {gameState.players.filter(p => p.id !== humanPlayer.id).map(opp => (
+                        <div 
+                            key={opp.id} 
+                            onClick={() => canPlay && setTargetId(opp.id)}
+                            className={`bg-slate-900/80 border-2 rounded-2xl p-4 transition-all hover:scale-105 cursor-pointer relative ${targetId === opp.id ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 'border-slate-700 hover:border-slate-500'}`}
+                        >
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center border border-slate-600">
+                                    {opp.isDead ? <Skull size={24}/> : <User size={24}/>}
+                                </div>
+                                <div>
+                                    <div className="font-bold text-white">{opp.name}</div>
+                                    <div className="flex gap-2 text-xs">
+                                        <span className="text-red-400 flex items-center gap-1"><Heart size={10}/> {opp.hp}</span>
+                                        <span className="text-blue-400 flex items-center gap-1"><Zap size={10}/> {opp.mana}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {/* Desktop Opponent Board Preview */}
+                            <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-1">
+                                {opp.lands.map((l, i) => <div key={i} className="w-2 h-2 rounded-full bg-emerald-500" title={l.name}></div>)}
+                                {opp.artifacts.map((a, i) => <div key={i} className="w-2 h-2 rounded-full bg-amber-500" title={a.name}></div>)}
+                            </div>
+                            {targetId === opp.id && <div className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full p-1.5 shadow-lg animate-bounce"><Crosshair size={16}/></div>}
+                        </div>
+                    ))}
+                </div>
+
+                {/* --- MOBILE OPPONENT LIST (VERTICAL WIDE BARS) --- */}
+                <div className="md:hidden flex flex-col gap-3 p-4 w-full">
+                    {gameState.players.filter(p => p.id !== humanPlayer.id).map(opp => (
+                        <div 
+                            key={opp.id} 
+                            onClick={() => canPlay && setTargetId(opp.id)} 
+                            className={`relative w-full bg-slate-900 border-2 rounded-xl p-3 flex items-center justify-between shadow-lg active:scale-95 transition-all ${targetId === opp.id ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`}
+                        >
+                            <div className="flex items-center gap-3 flex-1">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border bg-slate-800 ${targetId === opp.id ? 'border-red-500' : 'border-slate-600'}`}>
+                                    {opp.isDead ? <Skull size={20} className="text-slate-500"/> : <User size={20} className="text-slate-300"/>}
+                                    {/* Mark */}
+                                    {opp.elementMark && (
+                                        <div className="absolute -top-1 -left-1 w-4 h-4 bg-black rounded-full flex items-center justify-center border border-white z-10">
+                                            {/* @ts-ignore */}
+                                            {React.createElement(getIconComponent(ELEMENT_CONFIG[opp.elementMark].icon), {size: 8, className: ELEMENT_CONFIG[opp.elementMark].color})}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex flex-col flex-1 min-w-0">
+                                    <span className="text-sm font-bold text-white truncate">{opp.name}</span>
+                                    <div className="flex gap-3 mt-1">
+                                        <div className="flex items-center gap-1 bg-black/40 px-1.5 rounded">
+                                            <Heart size={10} className="text-red-500"/>
+                                            <span className="text-xs font-mono font-bold text-red-100">{opp.hp}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 bg-black/40 px-1.5 rounded">
+                                            <Zap size={10} className="text-blue-500"/>
+                                            <span className="text-xs font-mono font-bold text-blue-100">{opp.mana}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col items-end gap-1">
+                                <div className="flex gap-1">
+                                    {opp.lands.length > 0 && <span className="text-[10px] bg-emerald-900/50 text-emerald-400 px-1.5 rounded border border-emerald-500/30 flex items-center gap-0.5"><Factory size={8}/> {opp.lands.length}</span>}
+                                    {opp.artifacts.length > 0 && <span className="text-[10px] bg-amber-900/50 text-amber-400 px-1.5 rounded border border-amber-500/30 flex items-center gap-0.5"><Anchor size={8}/> {opp.artifacts.length}</span>}
+                                </div>
+                                <button onClick={(e) => {e.stopPropagation(); setInspectPlayerId(opp.id);}} className="p-1.5 bg-slate-800 rounded border border-slate-600 text-slate-400 hover:text-white">
+                                    <Eye size={14}/>
+                                </button>
+                            </div>
+
+                            {targetId === opp.id && <div className="absolute -top-2 right-1/2 translate-x-1/2 bg-red-600 text-white rounded-full px-3 py-0.5 text-[10px] font-bold shadow-lg animate-bounce z-20">LOCKED</div>}
+                        </div>
+                    ))}
+                </div>
+
+                {/* Animation Overlay */}
+                {animationData && (
+                    <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none bg-black/20 backdrop-blur-[1px]">
+                        <div className={`p-6 rounded-2xl border-2 backdrop-blur-md flex flex-col items-center gap-2 animate-fade-in-up ${animationData.type === 'attack' ? 'bg-red-900/80 border-red-500' : animationData.type === 'defense' ? 'bg-blue-900/80 border-blue-500' : 'bg-slate-800/80 border-slate-500'}`}>
+                            <div className="text-4xl">{animationData.type === 'attack' ? '⚔️' : '🛡️'}</div>
+                            <div className="text-2xl font-black text-white drop-shadow-md">{animationData.cardName}</div>
+                            {animationData.value > 0 && <div className="text-3xl font-mono text-yellow-300 font-bold">{animationData.value}</div>}
+                            <div className="text-sm opacity-80 bg-black/30 px-2 rounded">{animationData.msg}</div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Context Messages */}
+                <div className="mt-auto px-6 pb-4 flex justify-center pointer-events-none z-10 md:mb-8">
+                    {isHumanTurn && !amIBeingAttacked && !selectedCardIds.length && (
+                        <div className="bg-emerald-900/80 text-emerald-100 px-4 py-2 rounded-full text-xs font-bold shadow-lg border border-emerald-500/30 animate-pulse">
+                            你的回合
+                        </div>
+                    )}
+                    {amIBeingAttacked && (
+                        <div className="bg-red-900/90 text-white px-6 py-3 rounded-2xl text-center shadow-2xl border border-red-500 animate-pulse pointer-events-auto">
+                            <div className="text-xs font-bold uppercase text-red-300 mb-1">敵方攻擊</div>
+                            <div className="text-3xl font-black font-mono">{gameState.pendingAttack?.damage}</div>
+                            <div className="text-[10px] mt-1 opacity-80">請選擇對應攻擊卡反擊</div>
+                            <button onClick={handleSkipDefense} className="mt-2 text-xs underline opacity-60 hover:opacity-100">直接承受</button>
+                        </div>
+                    )}
+                </div>
+          </div>
+
+          {/* 3. PLAYER DASHBOARD & HAND (Fixed Bottom) */}
+          <div className="bg-slate-900 border-t border-slate-800 relative z-50 pb-safe">
               
-              <div className="flex items-center gap-3">
-                  {/* Soul Indicator */}
-                  <div className="flex flex-col items-end">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">Soul</span>
-                      <div className={`text-xs font-bold font-mono ${humanPlayer.soul > 0 ? 'text-yellow-400' : humanPlayer.soul < 0 ? 'text-purple-400' : 'text-slate-400'}`}>
-                          {humanPlayer.soul > 0 ? '+' : ''}{humanPlayer.soul}
+              {/* Active Card Inspector (Slide Up Panel) - MOBILE ONLY */}
+              <div className={`
+                  md:hidden absolute bottom-full left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out z-20 flex flex-col
+                  ${activeCard ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}
+              `} style={{ maxHeight: '60vh' }}>
+                  
+                  {activeCard && (
+                      <div className="p-5 flex flex-col gap-4">
+                          {/* Header info */}
+                          <div className="flex justify-between items-start">
+                              <div>
+                                  <h3 className="text-xl font-bold text-white leading-none">{t.cards[activeCard.id]?.name || activeCard.name}</h3>
+                                  <div className="flex gap-2 mt-2">
+                                      {/* @ts-ignore */}
+                                      <span className="text-[10px] uppercase font-bold tracking-wider bg-slate-800 px-2 py-0.5 rounded text-slate-400">{t.types[activeCard.type]}</span>
+                                      {activeCard.element && activeCard.element !== ElementType.NEUTRAL && (
+                                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${ELEMENT_CONFIG[activeCard.element].color} bg-slate-800`}>
+                                              {ELEMENT_CONFIG[activeCard.element].name}
+                                          </span>
+                                      )}
+                                  </div>
+                              </div>
+                              <div className="text-right">
+                                  <div className="text-2xl font-mono font-bold text-blue-400">{activeCard.manaCost} <span className="text-xs text-slate-500">MP</span></div>
+                                  {activeCard.cost > 0 && <div className="text-xs text-yellow-500 font-mono">{activeCard.cost} G</div>}
+                              </div>
+                          </div>
+
+                          {/* Description */}
+                          <div className="bg-black/30 p-3 rounded-xl border border-white/5 text-sm text-slate-300 leading-relaxed max-h-24 overflow-y-auto">
+                              {/* @ts-ignore */}
+                              {t.cards[activeCard.id]?.desc || activeCard.description}
+                              {preview?.comboName && (
+                                  <div className="mt-2 pt-2 border-t border-white/10 text-yellow-300 font-bold text-xs flex items-center gap-1">
+                                      <Sparkles size={12}/> 連擊: {preview.comboName} {preview.reactionBonusText && `(${preview.reactionBonusText})`}
+                                  </div>
+                              )}
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="flex gap-3">
+                              <button onClick={() => setSelectedCardIds([])} className="px-4 py-3 bg-slate-800 rounded-xl font-bold text-slate-400">取消</button>
+                              
+                              {/* Sell Button if single card */}
+                              {isHumanTurn && selectedCardIds.length === 1 && (
+                                  <button onClick={handleSell} className="px-4 py-3 bg-yellow-900/30 text-yellow-500 rounded-xl font-bold border border-yellow-700/50 flex flex-col items-center justify-center leading-none min-w-[80px]">
+                                      <span className="text-xs">出售</span>
+                                      <span className="text-[10px] opacity-70">+{Math.floor(activeCard.cost/2)}G</span>
+                                  </button>
+                              )}
+
+                              <button 
+                                  onClick={executePlay}
+                                  disabled={!isHumanTurn && !amIBeingAttacked}
+                                  className={`flex-1 py-3 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2
+                                      ${isHumanTurn || amIBeingAttacked ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}
+                                  `}
+                              >
+                                  {amIBeingAttacked ? '反擊!' : '出牌'}
+                                  {preview && preview.damage > 0 && <span className="bg-black/20 px-2 py-0.5 rounded text-sm font-mono">{preview.damage} DMG</span>}
+                              </button>
+                          </div>
+                      </div>
+                  )}
+              </div>
+
+              {/* Stats Bar (Mobile) & Desktop Toolbar */}
+              <div className="px-4 py-2 flex items-center justify-between border-b border-slate-800 bg-slate-950 relative z-30">
+                  <div className="flex gap-3 md:hidden">
+                      <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">HP</span>
+                          <div className="text-sm font-bold text-white flex items-center gap-1">
+                              <Heart size={12} className="text-red-500"/> {humanPlayer.hp}
+                          </div>
+                      </div>
+                      <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">MP</span>
+                          <div className="text-sm font-bold text-white flex items-center gap-1">
+                              <Zap size={12} className="text-blue-500"/> {humanPlayer.mana}
+                          </div>
+                      </div>
+                      <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">Gold</span>
+                          <div className="text-sm font-bold text-white flex items-center gap-1">
+                              <Coins size={12} className="text-yellow-500"/> {humanPlayer.gold}
+                          </div>
                       </div>
                   </div>
                   
-                  {/* Tab Switcher */}
-                  <div className="flex bg-slate-800 rounded-lg p-0.5 ml-2">
-                      <button onClick={()=>setMobileTab('hand')} className={`p-1.5 rounded-md transition-colors ${mobileTab === 'hand' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><List size={16}/></button>
-                      <button onClick={()=>setMobileTab('board')} className={`p-1.5 rounded-md transition-colors ${mobileTab === 'board' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><LayoutTemplate size={16}/></button>
+                  {/* Desktop Action Bar */}
+                  <div className="hidden md:flex gap-4 items-center">
+                      <button onClick={() => setShowShop(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-lg text-white font-bold hover:bg-indigo-500 transition-colors">
+                          <ShoppingBag size={16}/> 商店
+                      </button>
+                      <button 
+                          onClick={executePlay}
+                          disabled={!canPlay || (!isHumanTurn && !amIBeingAttacked)}
+                          className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all ${canPlay && (isHumanTurn || amIBeingAttacked) ? 'bg-green-600 text-white hover:bg-green-500 shadow-lg' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
+                      >
+                          {amIBeingAttacked ? '反擊!' : '出牌'} 
+                          {preview && preview.damage > 0 && <span className="bg-black/20 px-2 rounded text-xs font-mono">{preview.damage}</span>}
+                      </button>
+                      {selectedCardIds.length === 1 && isHumanTurn && (
+                          <button onClick={handleSell} className="text-yellow-500 text-xs font-bold hover:underline">出售卡牌</button>
+                      )}
+                      <button onClick={handleEndTurn} disabled={!isHumanTurn} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors ${isHumanTurn ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-slate-900 text-slate-600'}`}>
+                          結束回合
+                      </button>
                   </div>
-              </div>
-          </div>
 
-          {/* Bottom Content Area */}
-          <div className="relative z-30 bg-slate-900 min-h-[160px]">
-              {mobileTab === 'hand' ? (
-                  // Hand View
-                  <div className="p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full">
-                     {humanPlayer.isDead ? (
-                         <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
-                     ) : (
-                        humanPlayer.hand.map((card) => {
-                            const isSelected = selectedCardIds.includes(card.id);
-                            const isActionPhase = isHumanTurn;
-                            const isReactionPhase = amIBeingAttacked;
-                            const canInteract = isActionPhase || isReactionPhase;
-                            
-                            let isDisabled = !canInteract;
-                            if (amIBeingAttacked) {
-                                 const incomingType = gameState.pendingAttack?.attackType;
-                                 const isMatch = card.type === incomingType;
-                                 const isRune = card.type === CardType.RUNE;
-                                 if (!isMatch && !isRune) isDisabled = true;
-                            }
-
-                            return (
-                                <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : ''}`}>
-                                    <CardComponent 
-                                        card={card} 
-                                        lang={lang} 
-                                        onClick={() => !isDisabled && toggleSelectCard(card)} 
-                                        disabled={isDisabled} 
-                                        compact={true} 
-                                    />
-                                    {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
-                                </div>
-                            );
-                        })
-                     )}
-                     <div className="w-4 shrink-0"></div>
-                  </div>
-              ) : (
-                  // Board View (Lands & Artifacts)
-                  <div className="p-4 grid grid-cols-1 gap-4 h-full overflow-y-auto">
-                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
-                          <h4 className="text-xs font-bold text-emerald-400 uppercase mb-2 flex items-center gap-2"><Factory size={12}/> Lands ({humanPlayer.lands.length}/{MAX_LAND_SIZE})</h4>
-                          <div className="flex gap-2 flex-wrap">
-                              {humanPlayer.lands.length > 0 ? humanPlayer.lands.map((land, i) => (
-                                  <div key={i} className="bg-emerald-900/20 border border-emerald-500/30 p-2 rounded text-xs text-emerald-100 flex-1 min-w-[100px]">
-                                      <div className="font-bold">{land.name}</div>
-                                      <div className="text-[10px] opacity-70">+{land.value} Gold/Turn</div>
-                                  </div>
-                              )) : <div className="text-xs text-slate-600 italic">No Lands</div>}
+                  <div className="flex items-center gap-3">
+                      {/* Soul Indicator */}
+                      <div className="flex flex-col items-end">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase">Soul</span>
+                          <div className={`text-xs font-bold font-mono ${humanPlayer.soul > 0 ? 'text-yellow-400' : humanPlayer.soul < 0 ? 'text-purple-400' : 'text-slate-400'}`}>
+                              {humanPlayer.soul > 0 ? '+' : ''}{humanPlayer.soul}
                           </div>
                       </div>
                       
-                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
-                          <h4 className="text-xs font-bold text-amber-400 uppercase mb-2 flex items-center gap-2"><Anchor size={12}/> Artifacts ({humanPlayer.artifacts.length}/{MAX_ARTIFACT_SIZE})</h4>
-                          <div className="flex gap-2 flex-wrap">
-                              {humanPlayer.artifacts.length > 0 ? humanPlayer.artifacts.map((art, i) => (
-                                  <div key={i} className="bg-amber-900/20 border border-amber-500/30 p-2 rounded text-xs text-amber-100 flex-1 min-w-[100px]">
-                                      <div className="font-bold">{art.name}</div>
-                                      <div className="text-[10px] opacity-70">Effect Active</div>
-                                  </div>
-                              )) : <div className="text-xs text-slate-600 italic">No Artifacts</div>}
-                          </div>
+                      {/* Mobile Tab Switcher */}
+                      <div className="flex bg-slate-800 rounded-lg p-0.5 ml-2 md:hidden">
+                          <button onClick={()=>setMobileTab('hand')} className={`p-1.5 rounded-md transition-colors ${mobileTab === 'hand' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><List size={16}/></button>
+                          <button onClick={()=>setMobileTab('board')} className={`p-1.5 rounded-md transition-colors ${mobileTab === 'board' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><LayoutTemplate size={16}/></button>
                       </div>
                   </div>
-              )}
+              </div>
+
+              {/* Bottom Content Area */}
+              <div className="relative z-30 bg-slate-900 min-h-[160px] md:min-h-[220px]">
+                  {mobileTab === 'hand' || window.innerWidth >= 768 ? (
+                      // Hand View
+                      <div className="p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full md:justify-center md:pb-8">
+                         {humanPlayer.isDead ? (
+                             <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
+                         ) : (
+                            humanPlayer.hand.map((card) => {
+                                const isSelected = selectedCardIds.includes(card.id);
+                                const isActionPhase = isHumanTurn;
+                                const isReactionPhase = amIBeingAttacked;
+                                const canInteract = isActionPhase || isReactionPhase;
+                                
+                                let isDisabled = !canInteract;
+                                if (amIBeingAttacked) {
+                                     const incomingType = gameState.pendingAttack?.attackType;
+                                     const isMatch = card.type === incomingType;
+                                     const isRune = card.type === CardType.RUNE;
+                                     if (!isMatch && !isRune) isDisabled = true;
+                                }
+
+                                return (
+                                    <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : 'md:hover:-translate-y-2'}`}>
+                                        <CardComponent 
+                                            card={card} 
+                                            lang={lang} 
+                                            onClick={() => !isDisabled && toggleSelectCard(card)} 
+                                            disabled={isDisabled} 
+                                            compact={window.innerWidth < 768} 
+                                        />
+                                        {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
+                                    </div>
+                                );
+                            })
+                         )}
+                         <div className="w-4 shrink-0"></div>
+                      </div>
+                  ) : (
+                      // Mobile Board View (Lands & Artifacts)
+                      <div className="p-4 grid grid-cols-1 gap-4 h-full overflow-y-auto md:hidden">
+                          <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                              <h4 className="text-xs font-bold text-emerald-400 uppercase mb-2 flex items-center gap-2"><Factory size={12}/> Lands ({humanPlayer.lands.length}/{MAX_LAND_SIZE})</h4>
+                              <div className="flex gap-2 flex-wrap">
+                                  {humanPlayer.lands.length > 0 ? humanPlayer.lands.map((land, i) => (
+                                      <div key={i} className="bg-emerald-900/20 border border-emerald-500/30 p-2 rounded text-xs text-emerald-100 flex-1 min-w-[100px]">
+                                          <div className="font-bold">{land.name}</div>
+                                          <div className="text-[10px] opacity-70">+{land.value} Gold/Turn</div>
+                                      </div>
+                                  )) : <div className="text-xs text-slate-600 italic">No Lands</div>}
+                              </div>
+                          </div>
+                          
+                          <div className="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                              <h4 className="text-xs font-bold text-amber-400 uppercase mb-2 flex items-center gap-2"><Anchor size={12}/> Artifacts ({humanPlayer.artifacts.length}/{MAX_ARTIFACT_SIZE})</h4>
+                              <div className="flex gap-2 flex-wrap">
+                                  {humanPlayer.artifacts.length > 0 ? humanPlayer.artifacts.map((art, i) => (
+                                      <div key={i} className="bg-amber-900/20 border border-amber-500/30 p-2 rounded text-xs text-amber-100 flex-1 min-w-[100px]">
+                                          <div className="font-bold">{art.name}</div>
+                                          <div className="text-[10px] opacity-70">Effect Active</div>
+                                      </div>
+                                  )) : <div className="text-xs text-slate-600 italic">No Artifacts</div>}
+                              </div>
+                          </div>
+                      </div>
+                  )}
+              </div>
           </div>
       </div>
 
