@@ -24,7 +24,7 @@ const io = new Server(server, {
     }
 });
 
-// Admin Credentials (Simple hash for demo: SHA-256 of 'admin')
+// Admin Credentials (SHA-256 of 'admin' = 8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918)
 const ADMIN_HASH = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'; 
 
 interface RoomData {
@@ -51,11 +51,11 @@ io.on('connection', (socket: Socket) => {
 
     // --- Admin: Login ---
     socket.on('admin_login', (data: { user: string, passHash: string }, callback: (success: boolean) => void) => {
-        // Compare hash (Client sends SHA256 of input)
+        // Compare hash
         if (data.user === 'admin' && data.passHash === ADMIN_HASH) {
             isAdmin = true;
             socket.join('admin_channel');
-            if (callback) callback(true);
+            if (typeof callback === 'function') callback(true);
             
             // Send full room data to admin
             const allRooms = Object.values(rooms).map(r => ({
@@ -71,7 +71,7 @@ io.on('connection', (socket: Socket) => {
             }));
             socket.emit('admin_room_list', allRooms);
         } else {
-            if (callback) callback(false);
+            if (typeof callback === 'function') callback(false);
         }
     });
 
@@ -84,6 +84,7 @@ io.on('connection', (socket: Socket) => {
             io.in(roomId).socketsLeave(roomId);
             delete rooms[roomId];
             io.emit('rooms_changed');
+            
             // Update admin list
             const allRooms = Object.values(rooms).map(r => ({
                 id: r.id,
@@ -161,7 +162,7 @@ io.on('connection', (socket: Socket) => {
             isBot: false,
             isReady: true, 
             botDifficulty: 'normal',
-            isAdmin: isAdmin // Admin creating room
+            isAdmin: isAdmin
         };
 
         rooms[roomId] = {
@@ -227,7 +228,9 @@ io.on('connection', (socket: Socket) => {
             return;
         }
 
-        if (room.players.find(p => p.id === socket.id)) {
+        // Avoid duplicate join
+        const existingPlayer = room.players.find(p => p.id === socket.id);
+        if (existingPlayer) {
              if (typeof callback === 'function') callback({ success: true });
              return;
         }
@@ -291,9 +294,7 @@ io.on('connection', (socket: Socket) => {
             botDifficulty: 'normal'
         };
 
-        // Insert at specific index if possible (basic array handling, ideally map slots)
         room.players.push(botPlayer);
-        
         io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
         io.to(currentRoomId).emit('server_log', `房主加入了 AI: ${botPlayer.name}`);
         io.emit('rooms_changed');
@@ -304,8 +305,7 @@ io.on('connection', (socket: Socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
-        if (!player || (!player.isHost && !player.isAdmin)) return; // Admin can kick
-        if (targetId === player.id) return;
+        if (!player || (!player.isHost && !player.isAdmin)) return; 
 
         const targetIndex = room.players.findIndex(p => p.id === targetId);
         if (targetIndex === -1) return;
@@ -336,19 +336,19 @@ io.on('connection', (socket: Socket) => {
         io.to(currentRoomId).emit('settings_update', room.settings);
     });
 
-    // --- Lobby: Update Player Nation (Fix AI Bug) ---
+    // --- Lobby: Update Player Nation ---
     socket.on('update_player_nation', (targetId: string, nation: NationType) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
-        // Only host or admin can change others/bots, but users can change themselves
+        
         const isSelf = targetId === socket.id;
         if (!isSelf && !player?.isHost && !player?.isAdmin) return;
 
         const target = room.players.find(p => p.id === targetId);
         if (target) {
             target.nation = nation;
-            io.to(currentRoomId).emit('room_update', { players: room.players, hostId: room.players.find(p => p.isHost)?.id || '' });
+            io.to(currentRoomId).emit('room_update', { players: room.players, hostId: room.players.find(p=>p.isHost)?.id || '' });
         }
     });
 
@@ -401,11 +401,7 @@ io.on('connection', (socket: Socket) => {
 
         if (!gameState) return;
 
-        // Admin Debug Command
         if (action.type === 'ADMIN_COMMAND' && isAdmin) {
-            // Apply cheat to current state
-            // Simplified: Re-using debug console logic would require importing it or duplicating logic
-            // For now, basic logs
             io.to(currentRoomId).emit('server_log', `[ADMIN] Executed ${action.command}`);
             return;
         }
@@ -421,7 +417,7 @@ io.on('connection', (socket: Socket) => {
              }
         }
         if (action.type === 'SEND_CHAT') isAllowed = true;
-        if (isAdmin) isAllowed = true; // Admin override
+        if (isAdmin) isAllowed = true;
 
         if (!isAllowed) return;
 
@@ -506,7 +502,6 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('disconnect', () => {
-        // console.log(`User disconnected: ${socket.id}`);
         if (currentRoomId && rooms[currentRoomId]) {
             const room = rooms[currentRoomId];
             const wasHost = room.players.find(p => p.id === socket.id)?.isHost;

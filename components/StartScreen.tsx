@@ -104,7 +104,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
           <div className="flex items-center gap-2 text-xs font-medium opacity-60">
               <span className="text-slate-400">Created by KinsonLai</span>
           </div>
-          <div className="text-[10px] font-mono opacity-40">v2.1.1</div>
+          <div className="text-[10px] font-mono opacity-40">v2.1.2</div>
       </div>
     </div>
   );

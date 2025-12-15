@@ -61,20 +61,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   // --- Effects ---
 
-  // Load Name from Cookie on Mount
+  // Load Name from Cookie
   useEffect(() => {
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
       if (savedName) setMyName(savedName);
   }, []);
 
-  // Sync Local Player info (Name change) for Local Mode
+  // Local Mode Sync: Keep 'host_user' synced with local inputs
   useEffect(() => {
       if (mode === 'local') {
         setPlayers(prev => prev.map(p => p.id === 'host_user' ? { ...p, name: myName, nation: myNation } : p));
       }
   }, [myName, myNation, mode]);
 
-  // Initial connection if online
+  // Online Connection
   useEffect(() => {
       if (mode === 'online') {
           if (!isConnected && !isConnecting) {
@@ -90,7 +90,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               setPlayers(updatedPlayers);
               setHostId(newHostId);
               
-              // Ensure myNation matches server state if needed (optional, or trust UI)
+              // Only sync nation from server if it exists to avoid overwriting local selection before join
               const myP = updatedPlayers.find(p => p.id === socketService.getId());
               if (myP) setMyNation(myP.nation);
 
@@ -167,7 +167,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       if (!isConnected) return;
       if (!newRoomName.trim()) { showToast("請輸入房間名稱", 'error'); return; }
 
-      // Get cookie name if available (Redundant if useEffect worked, but safe)
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
       const finalName = savedName || myName;
 
@@ -228,8 +227,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       }
   };
 
-  // --- Room Logic ---
-
   const handleToggleReady = () => {
       if (mode === 'online') {
           socketService.toggleReady();
@@ -273,10 +270,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const changePlayerNation = (targetId: string, nation: NationType) => {
       if (mode === 'online') {
           // Send request to server to update nation
-          // @ts-ignore - Assuming update_player_nation exists on server and socketService
+          // @ts-ignore
           socketService.socket?.emit('update_player_nation', targetId, nation);
           
-          // Optimistically update local if it's me
           if (targetId === myId) setMyNation(nation);
       } else {
           setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, nation: nation } : p));
@@ -427,7 +423,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                 </div>
                                 
                                 <div 
-                                    onClick={() => setShowNationModal({ show: true, targetId: 'host_user' })} 
+                                    onClick={() => setShowNationModal({ show: true, targetId: myId })} 
                                     className="w-full bg-slate-950 border border-slate-700 hover:border-slate-500 rounded-xl p-3 cursor-pointer transition-all group relative overflow-hidden"
                                 >
                                     <div className={`absolute inset-0 opacity-10 ${NATION_CONFIG[myNation].bgColor}`}></div>
@@ -625,6 +621,168 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                 )}
             </div>
         </div>
+
+        {/* --- MODALS --- */}
+        
+        {/* Settings Modal (Extended) */}
+        {showSettingsModal && (
+            <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowSettingsModal(false)}>
+                <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg p-6 shadow-2xl overflow-y-auto max-h-[80vh]" onClick={e => e.stopPropagation()}>
+                    <h3 className="text-xl font-bold mb-6 text-white flex items-center gap-2"><Sliders className="text-emerald-500"/> 進階房間設定</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">手牌上限</label>
+                            <input type="number" value={settings.maxHandSize} onChange={e => handleUpdateSettings({...settings, maxHandSize: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white"/>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">每回合抽牌</label>
+                            <input type="number" value={settings.cardsDrawPerTurn} onChange={e => handleUpdateSettings({...settings, cardsDrawPerTurn: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white"/>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">商店數量</label>
+                            <input type="number" value={settings.shopSize} onChange={e => handleUpdateSettings({...settings, shopSize: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white"/>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">事件頻率 (回合)</label>
+                            <input type="number" value={settings.eventFrequency} onChange={e => handleUpdateSettings({...settings, eventFrequency: parseInt(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white"/>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">生命倍率</label>
+                            <input type="number" step="0.1" value={settings.healthMultiplier} onChange={e => handleUpdateSettings({...settings, healthMultiplier: parseFloat(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white"/>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase">價格倍率</label>
+                            <input type="number" step="0.1" value={settings.priceMultiplier} onChange={e => handleUpdateSettings({...settings, priceMultiplier: parseFloat(e.target.value)})} className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-white"/>
+                        </div>
+                    </div>
+                    <div className="mt-8">
+                        <button onClick={() => setShowSettingsModal(false)} className="w-full py-3 bg-indigo-600 rounded-xl font-bold text-white">確認</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* Nation Selector Modal (New Visual Design) */}
+        {showNationModal.show && (
+            <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowNationModal({show: false, targetId: null})}>
+                <div className="bg-slate-900/90 border border-slate-700 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                    {/* Modal Header */}
+                    <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
+                        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                            <Globe className="text-indigo-500"/> 選擇國度
+                        </h2>
+                        <button onClick={() => setShowNationModal({show: false, targetId: null})} className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors">
+                            <X size={24}/>
+                        </button>
+                    </div>
+
+                    {/* Nation Grid */}
+                    <div className="flex-1 overflow-y-auto p-6 bg-slate-950">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {Object.entries(NATION_CONFIG).map(([key, config]) => {
+                                const targetP = players.find(p => p.id === showNationModal.targetId);
+                                const isSelected = targetP ? targetP.nation === key : myNation === key;
+                                const nKey = key as NationType;
+                                
+                                return (
+                                    <div 
+                                        key={key} 
+                                        onClick={() => {
+                                            if (showNationModal.targetId) {
+                                                changePlayerNation(showNationModal.targetId, nKey);
+                                            }
+                                        }}
+                                        className={`relative group rounded-2xl border-2 transition-all cursor-pointer overflow-hidden flex flex-col ${isSelected ? `border-white ${config.bgColor} scale-[1.02] shadow-2xl` : 'border-slate-800 bg-slate-900/50 hover:border-slate-600 hover:bg-slate-900'}`}
+                                    >
+                                        {isSelected && (
+                                            <div className="absolute top-3 right-3 bg-white text-black rounded-full p-1 shadow-lg z-10">
+                                                <Check size={16} strokeWidth={4}/>
+                                            </div>
+                                        )}
+                                        
+                                        <div className="p-6 flex gap-5 items-start">
+                                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 shadow-lg border-2 ${isSelected ? 'border-white bg-black/20' : 'border-slate-700 bg-slate-800'} ${config.color}`}>
+                                                {nKey === NationType.FIGHTER && <Crown size={32}/>}
+                                                {nKey === NationType.HOLY && <Users size={32}/>}
+                                                {nKey === NationType.COMMERCIAL && <TrendingUp size={32}/>}
+                                                {nKey === NationType.MAGIC && <Zap size={32}/>}
+                                            </div>
+                                            <div>
+                                                <h3 className={`text-xl font-bold mb-1 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{config.name}</h3>
+                                                <p className={`text-xs leading-relaxed ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>{config.description}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Stats Bar */}
+                                        <div className="mt-auto bg-black/20 p-4 border-t border-white/5 flex justify-between text-xs font-mono">
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className={`${config.hpBonus > 0 ? 'text-green-400' : config.hpBonus < 0 ? 'text-red-400' : 'text-slate-500'} font-bold`}>
+                                                    {config.hpBonus > 0 ? '+' : ''}{config.hpBonus}
+                                                </span>
+                                                <span className="text-[10px] uppercase text-slate-500">HP</span>
+                                            </div>
+                                            <div className="w-px h-8 bg-white/10"></div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className={`${config.manaBonus > 0 ? 'text-blue-400' : 'text-slate-500'} font-bold`}>
+                                                    {config.manaBonus > 0 ? '+' : ''}{config.manaBonus}
+                                                </span>
+                                                <span className="text-[10px] uppercase text-slate-500">Mana</span>
+                                            </div>
+                                            <div className="w-px h-8 bg-white/10"></div>
+                                            <div className="flex flex-col items-center gap-1">
+                                                <span className={`${config.goldBonus > 0 ? 'text-yellow-400' : 'text-slate-500'} font-bold`}>
+                                                    {config.goldBonus > 0 ? '+' : ''}{config.goldBonus}
+                                                </span>
+                                                <span className="text-[10px] uppercase text-slate-500">Gold</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {showCreateModal && (
+            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
+                <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-fade-in-up" onClick={e => e.stopPropagation()}>
+                    <h3 className="text-xl font-bold mb-6 text-white flex items-center gap-2"><Plus className="text-indigo-500"/> 建立新房間</h3>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-xs text-slate-500 font-bold mb-1 block uppercase">房間名稱</label>
+                            <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:border-indigo-500 outline-none text-white"/>
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-500 font-bold mb-1 block uppercase">密碼 (選填)</label>
+                            <input value={newRoomPassword} onChange={e => setNewRoomPassword(e.target.value)} placeholder="留空則為公開無鎖" className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm focus:border-indigo-500 outline-none text-white"/>
+                        </div>
+                        <div className="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-600 transition-colors" onClick={() => setNewRoomIsPublic(!newRoomIsPublic)}>
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${newRoomIsPublic ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600'}`}>
+                                {newRoomIsPublic && <CheckCircle size={14} className="text-white"/>}
+                            </div>
+                            <span className="text-sm font-bold text-slate-300 select-none">公開顯示 (在大廳列表可見)</span>
+                        </div>
+                    </div>
+                    <div className="flex gap-3 mt-8">
+                        <button onClick={() => setShowCreateModal(false)} className="flex-1 py-3 bg-slate-800 rounded-xl font-bold text-slate-400 hover:text-white transition-colors">取消</button>
+                        <button onClick={handleCreateOnlineRoom} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95">建立</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {showPasswordModal && (
+            <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowPasswordModal(null)}>
+                <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center" onClick={e => e.stopPropagation()}>
+                    <Lock size={40} className="mx-auto mb-4 text-yellow-500"/>
+                    <h3 className="text-lg font-bold mb-2 text-white">此房間需要密碼</h3>
+                    <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-center text-lg tracking-widest mb-6 focus:border-indigo-500 outline-none text-white" autoFocus/>
+                    <button onClick={() => executeJoin(showPasswordModal, passwordInput)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-white transition-transform active:scale-95">確認</button>
+                </div>
+            </div>
+        )}
     </div>
   );
 };

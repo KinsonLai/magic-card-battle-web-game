@@ -7,23 +7,21 @@ class SocketService {
   private url: string = (import.meta as any).env?.VITE_SERVER_URL || 
                         ((import.meta as any).env?.PROD ? window.location.origin : 'http://localhost:3000');
   
-  // Buffer for listeners registered before connection or needing re-attachment
   private pendingListeners: Map<string, Array<(...args: any[]) => void>> = new Map();
 
   public connect(url?: string): Promise<void> {
     if (url) this.url = url;
     
     return new Promise((resolve, reject) => {
-      // If already connected, ensure listeners are up to date and resolve
       if (this.socket && this.socket.connected) {
-          this.flushPendingListeners(); // CRITICAL FIX: Always flush pending even if already connected
+          this.flushPendingListeners(); 
           resolve();
           return;
       }
 
       this.socket = io(this.url, {
         transports: ['websocket'],
-        reconnectionAttempts: 3
+        reconnectionAttempts: 5
       });
 
       this.socket.on('connect', () => {
@@ -43,7 +41,6 @@ class SocketService {
       if (!this.socket) return;
       this.pendingListeners.forEach((callbacks, event) => {
           callbacks.forEach(cb => {
-              // Prevent duplicates by turning off first (safe to call multiple times)
               this.socket?.off(event, cb);
               this.socket?.on(event, cb);
           });
@@ -68,7 +65,6 @@ class SocketService {
   // --- Internal Helper for Event Management ---
   
   private on(event: string, callback: (...args: any[]) => void): () => void {
-      // 1. Add to pending buffer
       if (!this.pendingListeners.has(event)) {
           this.pendingListeners.set(event, []);
       }
@@ -77,13 +73,11 @@ class SocketService {
           list.push(callback);
       }
 
-      // 2. If socket exists, attach immediately
       if (this.socket) {
-          this.socket.off(event, callback); // Safety check
+          this.socket.off(event, callback); 
           this.socket.on(event, callback);
       }
 
-      // 3. Return cleanup function
       return () => {
           const currentList = this.pendingListeners.get(event);
           if (currentList) {
@@ -180,7 +174,16 @@ class SocketService {
 
   // --- Admin Events ---
 
-  public loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
+  public async loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
+      if (!this.isConnected()) {
+          try {
+              await this.connect();
+          } catch (e) {
+              console.error("Connection failed during admin login");
+              callback(false);
+              return;
+          }
+      }
       this.socket?.emit('admin_login', { user, passHash }, callback);
   }
 

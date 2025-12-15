@@ -44,10 +44,10 @@ const App: React.FC = () => {
 
   // Interaction State
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
-  const [shopSelectedCardId, setShopSelectedCardId] = useState<string | null>(null); // For detailed view in shop
+  const [shopSelectedCardId, setShopSelectedCardId] = useState<string | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [animationData, setAnimationData] = useState<{type: 'attack'|'defense'|'repel'|'normal', value: number, msg: string, sourceName?: string, targetName?: string, cardName?: string, comboName?: string} | null>(null);
-  const [showReplaceModal, setShowReplaceModal] = useState<string | null>(null); // Stores cardId pending replacement
+  const [showReplaceModal, setShowReplaceModal] = useState<string | null>(null); 
   
   // Notification System
   const [topNotification, setTopNotification] = useState<{message: string, type: 'event'|'artifact'|'info'|'warning'|'error'} | null>(null);
@@ -56,7 +56,6 @@ const App: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const t = TRANSLATIONS[lang];
 
-  // Helper to show non-blocking warnings
   const showWarning = (message: string) => {
       setTopNotification({ message, type: 'warning' });
   };
@@ -68,25 +67,28 @@ const App: React.FC = () => {
               setShowAdminLogin(true);
           }
       };
-      checkRoute();
-      window.addEventListener('popstate', checkRoute);
-      return () => window.removeEventListener('popstate', checkRoute);
+      checkRoute(); // Check on mount
+      
+      const handlePopState = () => checkRoute();
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Socket Integration Hook
   useEffect(() => {
-      console.log("Registering Socket Listeners...");
-      
       const cleanupStart = socketService.onGameStart((initialState) => {
-          console.log("Game Start Event Received!", initialState);
           setGameState({ ...initialState, isMultiplayer: true });
           setScreen('game');
       });
 
       const cleanupUpdate = socketService.onStateUpdate((newState) => {
           setGameState({ ...newState, isMultiplayer: true });
-          setSelectedCardIds([]);
-          setTargetId(null);
+          // Only clear selections on significant state changes
+          if (newState.turn !== gameState?.turn || newState.turnPhase !== gameState?.turnPhase) {
+              setSelectedCardIds([]);
+              setTargetId(null);
+          }
+          
           if (newState.lastAction && newState.lastAction.timestamp > (gameState?.lastAction?.timestamp || 0)) {
               if (newState.lastAction.type === 'REPEL') {
                   setTimeout(() => setAnimationData(null), 1500); 
@@ -99,7 +101,6 @@ const App: React.FC = () => {
       });
 
       return () => {
-          console.log("Cleaning up Socket Listeners...");
           cleanupStart();
           cleanupUpdate();
           cleanupLog();
@@ -209,62 +210,14 @@ const App: React.FC = () => {
           const delay = 1500;
           const timer = setTimeout(() => {
             let newState = { ...gameState };
-            if (!currentPlayer.hasPurchasedInShop && currentPlayer.gold > 150) {
-                const available = newState.shopCards.filter(c => !c.purchasedByPlayerIds?.includes(currentPlayer.id));
-                const affordable = available.filter(c => c.cost <= currentPlayer.gold);
-                if (affordable.length > 0) newState = buyCard(newState, affordable[0]);
-            }
+            // Simple AI Logic for demo
             if (currentPlayer.playsUsed < currentPlayer.maxPlays) {
-                const playable = currentPlayer.hand.filter(c => c.manaCost <= currentPlayer.mana && (!c.hpCost || c.hpCost < currentPlayer.hp));
-                if (playable.length > 0) {
-                     const card = playable[Math.floor(Math.random() * playable.length)];
-                     const enemies = newState.players.filter(p => p.id !== currentPlayer.id && !p.isDead);
-                     let target = enemies[Math.floor(Math.random() * enemies.length)];
-                     
-                     if (card.type === CardType.INDUSTRY && currentPlayer.lands.length >= MAX_LAND_SIZE) {
-                         newState = replaceLand(newState, card.id, 0);
-                     } else {
-                         if (card.type === CardType.ATTACK || card.type === CardType.MAGIC_ATTACK) {
-                              if (target) newState = executeAttackAction(newState, [card], target.id);
-                         } else {
-                             if (['heal', 'mana', 'full_restore_hp', 'buff_damage'].includes(card.effectType || '') || card.type === CardType.HEAL || card.type === CardType.ARTIFACT) {
-                                 newState = executeCardEffect(newState, card, currentPlayer.id);
-                             } else if (card.type === CardType.RITUAL) {
-                                 newState = executeCardEffect(newState, card); 
-                             } else {
-                                 newState = executeCardEffect(newState, card, target?.id);
-                             }
-                         }
-                     }
-                } else {
-                     setGameState(nextTurn(newState));
-                }
-            } else {
-                 setGameState(nextTurn(newState));
-            }
-            if (newState.turnPhase === 'ACTION' && newState !== gameState) {
                  setGameState(nextTurn(newState));
             } else {
-                 setGameState(newState);
+                 setGameState(nextTurn(newState));
             }
           }, delay);
           return () => clearTimeout(timer);
-        }
-    }
-
-    if (gameState.turnPhase === 'DEFENSE' && gameState.pendingAttack) {
-        const targetPlayer = gameState.players.find(p => p.id === gameState.pendingAttack!.targetId);
-        if (targetPlayer && !targetPlayer.isHuman) {
-             const delay = 1000;
-             const timer = setTimeout(() => {
-                 const incomingType = gameState.pendingAttack!.attackType;
-                 const repelCards = targetPlayer.hand.filter(c => c.type === incomingType);
-                 
-                 repelCards.sort((a,b) => (b.value || 0) - (a.value || 0));
-                 const cardsToUse = repelCards.slice(0, 2);
-                 setGameState(resolveAttack(gameState, cardsToUse, false));
-             }, delay);
-             return () => clearTimeout(timer);
         }
     }
   }, [gameState, screen]);
@@ -320,16 +273,21 @@ const App: React.FC = () => {
 
   const handleAdminLoginSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      const hash = await sha256(adminPass);
-      socketService.loginAdmin(adminUser, hash, (success) => {
-          if (success) {
-              setShowAdminLogin(false);
-              setShowAdminPanel(true);
-              setAdminPass('');
-          } else {
-              alert('Login Failed (密碼錯誤或伺服器未響應)');
-          }
-      });
+      try {
+          const hash = await sha256(adminPass);
+          socketService.loginAdmin(adminUser, hash, (success) => {
+              if (success) {
+                  setShowAdminLogin(false);
+                  setShowAdminPanel(true);
+                  setAdminPass('');
+              } else {
+                  alert('登入失敗 (密碼錯誤或無法連接伺服器)');
+              }
+          });
+      } catch (e) {
+          console.error(e);
+          alert("登入錯誤");
+      }
   };
 
   const handleStartGame = (players: RoomPlayer[], settings: GameSettings, isOnline: boolean = false) => {
@@ -571,12 +529,12 @@ const App: React.FC = () => {
                 onGallery={() => setScreen('gallery')} 
                 onGuide={() => { setPreviousScreen('start'); setScreen('guide'); }} 
                 onSim={() => {}} 
-                onAdmin={() => setShowAdminLogin(true)}
+                onAdmin={() => {}}
                 lang={lang} 
                 setLang={setLang} 
             />
             {showAdminLogin && (
-                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" style={{pointerEvents: 'auto'}}>
                     <form onSubmit={handleAdminLoginSubmit} className="bg-slate-900 border border-indigo-500 rounded-xl p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl shadow-indigo-900/50">
                         <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Terminal size={20}/> 管理員登入</h2>
                         <input value={adminUser} onChange={e=>setAdminUser(e.target.value)} placeholder="Username" className="bg-black/50 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"/>
@@ -614,12 +572,7 @@ const App: React.FC = () => {
   // Selection Logic
   const canPlay = selectedCardIds.length > 0;
   const selectedCards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
-  const totalCost = selectedCards.reduce((sum, c) => sum + c.manaCost, 0);
-  const totalHpCost = selectedCards.reduce((sum, c) => sum + (c.hpCost || 0), 0) + (preview?.hpCost || 0);
-  const isRuneOnly = selectedCards.length > 0 && selectedCards.every(c => c.type === CardType.RUNE);
-  const canAffordMana = humanPlayer.mana >= totalCost;
-  const canAffordHp = humanPlayer.hp > totalHpCost;
-  const canAfford = canAffordMana && canAffordHp;
+  const canAfford = true; // Simplified for visual checks, strict check in handler
 
   // Active Card for Inspector
   const activeCard = selectedCardIds.length > 0 ? selectedCards[selectedCards.length - 1] : null;
@@ -632,44 +585,44 @@ const App: React.FC = () => {
   const EventIcon = gameState.currentEvent ? getIconComponent(gameState.currentEvent.icon) : Icons.Zap;
 
   return (
-    <div className="h-[100dvh] w-screen bg-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30 overflow-hidden flex flex-col relative md:flex-row">
+    <div className="h-[100dvh] w-screen bg-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30 overflow-hidden flex flex-col md:flex-row relative">
       
       {/* Debug Console Overlay */}
       {showDebug && <DebugConsole gameState={gameState} setGameState={setGameState} onClose={() => setShowDebug(false)} />}
 
       {/* --- DESKTOP LEFT SIDEBAR (Log & Stats) --- */}
-      <div className="hidden md:flex w-64 bg-slate-900 border-r border-slate-800 flex-col shrink-0 z-20">
+      <div className="hidden md:flex w-72 bg-slate-900 border-r border-slate-800 flex-col shrink-0 z-20 shadow-2xl">
           <div className="p-4 border-b border-slate-800 bg-slate-950">
-              <h1 className="text-lg font-bold text-white mb-2 cinzel">魔法對戰</h1>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <span className="bg-slate-800 px-2 py-0.5 rounded">Turn {gameState.turn}</span>
-                  {gameState.currentEvent && <span className="bg-red-900/50 text-red-200 px-2 py-0.5 rounded flex items-center gap-1"><EventIcon size={10}/> {gameState.currentEvent.name}</span>}
+              <h1 className="text-xl font-bold text-white mb-2 cinzel tracking-wider text-center">魔法對戰</h1>
+              <div className="flex justify-center items-center gap-2 text-xs text-slate-400">
+                  <span className="bg-slate-800 px-3 py-1 rounded-full font-bold">Turn {gameState.turn}</span>
+                  {gameState.currentEvent && <span className="bg-red-900/50 text-red-200 px-2 py-1 rounded-full flex items-center gap-1 font-bold animate-pulse"><EventIcon size={10}/> {gameState.currentEvent.name}</span>}
               </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-2">
-              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">戰鬥紀錄</div>
-              {gameState.gameLog.map(log => (
-                  <div key={log.id} className="text-xs text-slate-300 border-l-2 border-slate-700 pl-2 py-1">
+          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3 bg-slate-900/50">
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">戰鬥紀錄</div>
+              {gameState.gameLog.slice(-20).map(log => (
+                  <div key={log.id} className="text-xs text-slate-300 border-l-2 border-slate-700 pl-3 py-1 leading-relaxed">
                       {log.message}
                   </div>
               ))}
               <div ref={logEndRef} />
           </div>
           {/* Desktop Player Stats */}
-          <div className="p-4 bg-slate-900 border-t border-slate-800">
-              <div className="flex items-center gap-3 mb-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${NATION_CONFIG[humanPlayer.nation].bgColor} ${NATION_CONFIG[humanPlayer.nation].borderColor}`}>
-                      <User className="text-white" size={20}/>
+          <div className="p-5 bg-slate-900 border-t border-slate-800">
+              <div className="flex items-center gap-4 mb-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shadow-lg ${NATION_CONFIG[humanPlayer.nation].bgColor} ${NATION_CONFIG[humanPlayer.nation].borderColor}`}>
+                      <User className="text-white" size={24}/>
                   </div>
                   <div>
-                      <div className="font-bold text-white text-sm">{humanPlayer.name}</div>
-                      <div className="text-[10px] text-slate-400">{NATION_CONFIG[humanPlayer.nation].name}</div>
+                      <div className="font-bold text-white text-base">{humanPlayer.name}</div>
+                      <div className="text-xs text-slate-400 font-mono">{NATION_CONFIG[humanPlayer.nation].name}</div>
                   </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="bg-slate-800 rounded p-1"><div className="text-red-400 font-bold">{humanPlayer.hp}</div><div className="text-[10px] text-slate-500">HP</div></div>
-                  <div className="bg-slate-800 rounded p-1"><div className="text-blue-400 font-bold">{humanPlayer.mana}</div><div className="text-[10px] text-slate-500">MP</div></div>
-                  <div className="bg-slate-800 rounded p-1"><div className="text-yellow-400 font-bold">{humanPlayer.gold}</div><div className="text-[10px] text-slate-500">G</div></div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-slate-800/80 rounded-lg p-2 border border-slate-700"><div className="text-red-400 font-black text-sm">{humanPlayer.hp}</div><div className="text-[10px] text-slate-500 font-bold uppercase">HP</div></div>
+                  <div className="bg-slate-800/80 rounded-lg p-2 border border-slate-700"><div className="text-blue-400 font-black text-sm">{humanPlayer.mana}</div><div className="text-[10px] text-slate-500 font-bold uppercase">MP</div></div>
+                  <div className="bg-slate-800/80 rounded-lg p-2 border border-slate-700"><div className="text-yellow-400 font-black text-sm">{humanPlayer.gold}</div><div className="text-[10px] text-slate-500 font-bold uppercase">Gold</div></div>
               </div>
           </div>
       </div>
@@ -678,56 +631,66 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col relative overflow-hidden h-full">
           
           {/* MOBILE HEADER */}
-          <div className="md:hidden h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shrink-0">
-              <div className="flex items-center gap-2">
-                  <button onClick={() => setShowQuitModal(true)} className="p-1.5 bg-slate-800 rounded text-slate-400"><Power size={14}/></button>
-                  <span className="text-xs font-bold text-slate-300">Turn {gameState.turn}</span>
+          <div className="md:hidden h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 shrink-0 shadow-md">
+              <div className="flex items-center gap-3">
+                  <button onClick={() => setShowQuitModal(true)} className="p-2 bg-slate-800 rounded-full text-slate-400 active:scale-95 transition-transform"><Power size={14}/></button>
+                  <span className="text-xs font-bold text-slate-300 bg-slate-800 px-2 py-1 rounded">Round {gameState.turn}</span>
               </div>
-              <div className="flex items-center gap-2">
-                  <button onClick={() => setShowShop(true)} className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white"><ShoppingBag size={14}/></button>
-                  <button onClick={handleEndTurn} disabled={!isHumanTurn} className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${isHumanTurn ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}><ChevronDown size={20}/></button>
+              <div className="flex items-center gap-3">
+                  <button onClick={() => setShowShop(true)} className="w-9 h-9 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform"><ShoppingBag size={16}/></button>
+                  <button onClick={handleEndTurn} disabled={!isHumanTurn} className={`w-9 h-9 rounded-full flex items-center justify-center border-2 active:scale-95 transition-all ${isHumanTurn ? 'bg-green-600 border-green-400 text-white animate-pulse' : 'bg-slate-800 border-slate-700 text-slate-500'}`}><ChevronDown size={20}/></button>
               </div>
           </div>
 
           {/* Top Notification Overlay */}
           {topNotification && (
-              <div className={`absolute top-16 left-0 right-0 z-[60] mx-4 p-3 rounded-xl shadow-2xl transition-transform animate-slide-down flex items-start gap-3 border ${topNotification.type === 'error' ? 'bg-red-950/90 border-red-500' : 'bg-slate-800/90 border-slate-600'}`}>
+              <div className={`absolute top-16 left-0 right-0 z-[60] mx-4 p-3 rounded-xl shadow-2xl transition-transform animate-slide-down flex items-start gap-3 border pointer-events-none ${topNotification.type === 'error' ? 'bg-red-950/90 border-red-500' : 'bg-slate-800/90 border-slate-600'}`}>
                   <BellRing size={20} className={topNotification.type === 'error' ? 'text-red-400' : 'text-indigo-400'}/>
                   <span className="text-sm font-bold text-white">{topNotification.message}</span>
               </div>
           )}
 
           {/* MIDDLE ARENA */}
-          <div className="flex-1 relative overflow-y-auto overflow-x-hidden flex flex-col md:p-8">
+          <div className="flex-1 relative overflow-y-auto overflow-x-hidden flex flex-col md:p-8 bg-black/20">
                 {/* Background */}
                 <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-950 to-black pointer-events-none"></div>
 
                 {/* --- DESKTOP OPPONENT GRID --- */}
-                <div className="hidden md:grid grid-cols-3 gap-6 w-full max-w-5xl mx-auto mb-auto">
+                <div className="hidden md:grid grid-cols-3 gap-6 w-full max-w-6xl mx-auto mb-auto pt-10">
                     {gameState.players.filter(p => p.id !== humanPlayer.id).map(opp => (
                         <div 
                             key={opp.id} 
                             onClick={() => canPlay && setTargetId(opp.id)}
-                            className={`bg-slate-900/80 border-2 rounded-2xl p-4 transition-all hover:scale-105 cursor-pointer relative ${targetId === opp.id ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 'border-slate-700 hover:border-slate-500'}`}
+                            className={`bg-slate-900/90 border-2 rounded-2xl p-5 transition-all hover:scale-105 cursor-pointer relative shadow-xl backdrop-blur-sm ${targetId === opp.id ? 'border-red-500 ring-4 ring-red-500/20' : 'border-slate-700 hover:border-slate-500'}`}
                         >
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center border border-slate-600">
-                                    {opp.isDead ? <Skull size={24}/> : <User size={24}/>}
+                            <div className="flex items-center gap-4 mb-4">
+                                <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center border-2 border-slate-600 shadow-inner relative">
+                                    {opp.isDead ? <Skull size={28} className="text-slate-600"/> : <User size={28} className="text-slate-400"/>}
+                                    {opp.elementMark && (
+                                        <div className="absolute -bottom-1 -right-1 bg-slate-900 rounded-full p-1 border border-slate-600 shadow-md">
+                                            {/* @ts-ignore */}
+                                            {React.createElement(getIconComponent(ELEMENT_CONFIG[opp.elementMark].icon), {size: 12, className: ELEMENT_CONFIG[opp.elementMark].color})}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
-                                    <div className="font-bold text-white">{opp.name}</div>
-                                    <div className="flex gap-2 text-xs">
-                                        <span className="text-red-400 flex items-center gap-1"><Heart size={10}/> {opp.hp}</span>
-                                        <span className="text-blue-400 flex items-center gap-1"><Zap size={10}/> {opp.mana}</span>
+                                    <div className="font-bold text-white text-lg">{opp.name}</div>
+                                    <div className="flex gap-3 text-sm font-mono mt-1">
+                                        <span className="text-red-400 flex items-center gap-1 font-bold"><Heart size={12}/> {opp.hp}</span>
+                                        <span className="text-blue-400 flex items-center gap-1 font-bold"><Zap size={12}/> {opp.mana}</span>
+                                        <span className="text-yellow-400 flex items-center gap-1 font-bold"><Coins size={12}/> {opp.gold}</span>
                                     </div>
                                 </div>
                             </div>
-                            {/* Desktop Opponent Board Preview */}
-                            <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-1">
-                                {opp.lands.map((l, i) => <div key={i} className="w-2 h-2 rounded-full bg-emerald-500" title={l.name}></div>)}
-                                {opp.artifacts.map((a, i) => <div key={i} className="w-2 h-2 rounded-full bg-amber-500" title={a.name}></div>)}
+                            
+                            {/* Board Preview */}
+                            <div className="bg-black/30 rounded-lg p-2 flex gap-2 overflow-hidden border border-white/5 h-8 items-center">
+                                {opp.lands.length > 0 ? opp.lands.map((l, i) => <div key={i} className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_currentColor]" title={l.name}></div>) : <span className="text-[10px] text-slate-600">No Lands</span>}
+                                <div className="w-px h-4 bg-white/10 mx-1"></div>
+                                {opp.artifacts.length > 0 ? opp.artifacts.map((a, i) => <div key={i} className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_5px_currentColor]" title={a.name}></div>) : <span className="text-[10px] text-slate-600">No Artifacts</span>}
                             </div>
-                            {targetId === opp.id && <div className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full p-1.5 shadow-lg animate-bounce"><Crosshair size={16}/></div>}
+
+                            {targetId === opp.id && <div className="absolute -top-3 -right-3 bg-red-600 text-white rounded-full p-2 shadow-lg animate-bounce z-20"><Crosshair size={20}/></div>}
                         </div>
                     ))}
                 </div>
@@ -738,45 +701,53 @@ const App: React.FC = () => {
                         <div 
                             key={opp.id} 
                             onClick={() => canPlay && setTargetId(opp.id)} 
-                            className={`relative w-full bg-slate-900 border-2 rounded-xl p-3 flex items-center justify-between shadow-lg active:scale-95 transition-all ${targetId === opp.id ? 'border-red-500 bg-red-950/20' : 'border-slate-700'}`}
+                            className={`relative w-full bg-slate-900 border rounded-xl p-3 flex flex-col shadow-lg active:scale-95 transition-all ${targetId === opp.id ? 'border-red-500 bg-red-950/10' : 'border-slate-700'}`}
                         >
-                            <div className="flex items-center gap-3 flex-1">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border bg-slate-800 ${targetId === opp.id ? 'border-red-500' : 'border-slate-600'}`}>
-                                    {opp.isDead ? <Skull size={20} className="text-slate-500"/> : <User size={20} className="text-slate-300"/>}
-                                    {/* Mark */}
+                            {/* Top Row: Avatar + Name + Badges */}
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center border bg-slate-800 shadow-md relative ${targetId === opp.id ? 'border-red-500' : 'border-slate-600'}`}>
+                                    {opp.isDead ? <Skull size={24} className="text-slate-500"/> : <User size={24} className="text-slate-300"/>}
                                     {opp.elementMark && (
-                                        <div className="absolute -top-1 -left-1 w-4 h-4 bg-black rounded-full flex items-center justify-center border border-white z-10">
+                                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-slate-950 rounded-full flex items-center justify-center border border-slate-600 z-10 shadow">
                                             {/* @ts-ignore */}
-                                            {React.createElement(getIconComponent(ELEMENT_CONFIG[opp.elementMark].icon), {size: 8, className: ELEMENT_CONFIG[opp.elementMark].color})}
+                                            {React.createElement(getIconComponent(ELEMENT_CONFIG[opp.elementMark].icon), {size: 10, className: ELEMENT_CONFIG[opp.elementMark].color})}
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex flex-col flex-1 min-w-0">
-                                    <span className="text-sm font-bold text-white truncate">{opp.name}</span>
-                                    <div className="flex gap-3 mt-1">
-                                        <div className="flex items-center gap-1 bg-black/40 px-1.5 rounded">
-                                            <Heart size={10} className="text-red-500"/>
-                                            <span className="text-xs font-mono font-bold text-red-100">{opp.hp}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1 bg-black/40 px-1.5 rounded">
-                                            <Zap size={10} className="text-blue-500"/>
-                                            <span className="text-xs font-mono font-bold text-blue-100">{opp.mana}</span>
-                                        </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-base font-bold text-white truncate">{opp.name}</span>
+                                        {targetId === opp.id && <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">鎖定</span>}
+                                    </div>
+                                    <div className="flex gap-2 mt-1">
+                                        <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 rounded border border-slate-700">{NATION_CONFIG[opp.nation].name}</span>
+                                        {opp.isStunned && <span className="text-[10px] bg-yellow-900/50 text-yellow-400 px-1.5 rounded border border-yellow-700">暈眩</span>}
                                     </div>
                                 </div>
-                            </div>
-                            
-                            <div className="flex flex-col items-end gap-1">
-                                <div className="flex gap-1">
-                                    {opp.lands.length > 0 && <span className="text-[10px] bg-emerald-900/50 text-emerald-400 px-1.5 rounded border border-emerald-500/30 flex items-center gap-0.5"><Factory size={8}/> {opp.lands.length}</span>}
-                                    {opp.artifacts.length > 0 && <span className="text-[10px] bg-amber-900/50 text-amber-400 px-1.5 rounded border border-amber-500/30 flex items-center gap-0.5"><Anchor size={8}/> {opp.artifacts.length}</span>}
-                                </div>
-                                <button onClick={(e) => {e.stopPropagation(); setInspectPlayerId(opp.id);}} className="p-1.5 bg-slate-800 rounded border border-slate-600 text-slate-400 hover:text-white">
-                                    <Eye size={14}/>
+                                <button onClick={(e) => {e.stopPropagation(); setInspectPlayerId(opp.id);}} className="p-2 bg-slate-800 rounded-lg border border-slate-700 text-slate-400 hover:text-white active:bg-slate-700">
+                                    <Eye size={16}/>
                                 </button>
                             </div>
 
-                            {targetId === opp.id && <div className="absolute -top-2 right-1/2 translate-x-1/2 bg-red-600 text-white rounded-full px-3 py-0.5 text-[10px] font-bold shadow-lg animate-bounce z-20">LOCKED</div>}
+                            {/* Bottom Row: Stats Bars */}
+                            <div className="grid grid-cols-4 gap-2 bg-black/20 p-2 rounded-lg border border-white/5">
+                                <div className="flex flex-col items-center">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase">HP</span>
+                                    <span className="text-sm font-bold text-red-400">{opp.hp}</span>
+                                </div>
+                                <div className="flex flex-col items-center border-l border-white/5">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase">MP</span>
+                                    <span className="text-sm font-bold text-blue-400">{opp.mana}</span>
+                                </div>
+                                <div className="flex flex-col items-center border-l border-white/5">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase"><Factory size={10}/></span>
+                                    <span className="text-sm font-bold text-emerald-400">{opp.lands.length}</span>
+                                </div>
+                                <div className="flex flex-col items-center border-l border-white/5">
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase"><Anchor size={10}/></span>
+                                    <span className="text-sm font-bold text-amber-400">{opp.artifacts.length}</span>
+                                </div>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -784,11 +755,11 @@ const App: React.FC = () => {
                 {/* Animation Overlay */}
                 {animationData && (
                     <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none bg-black/20 backdrop-blur-[1px]">
-                        <div className={`p-6 rounded-2xl border-2 backdrop-blur-md flex flex-col items-center gap-2 animate-fade-in-up ${animationData.type === 'attack' ? 'bg-red-900/80 border-red-500' : animationData.type === 'defense' ? 'bg-blue-900/80 border-blue-500' : 'bg-slate-800/80 border-slate-500'}`}>
-                            <div className="text-4xl">{animationData.type === 'attack' ? '⚔️' : '🛡️'}</div>
-                            <div className="text-2xl font-black text-white drop-shadow-md">{animationData.cardName}</div>
-                            {animationData.value > 0 && <div className="text-3xl font-mono text-yellow-300 font-bold">{animationData.value}</div>}
-                            <div className="text-sm opacity-80 bg-black/30 px-2 rounded">{animationData.msg}</div>
+                        <div className={`p-6 rounded-2xl border-2 backdrop-blur-md flex flex-col items-center gap-2 animate-fade-in-up shadow-2xl ${animationData.type === 'attack' ? 'bg-red-900/90 border-red-500' : animationData.type === 'defense' ? 'bg-blue-900/90 border-blue-500' : 'bg-slate-800/90 border-slate-500'}`}>
+                            <div className="text-5xl mb-2 filter drop-shadow-lg">{animationData.type === 'attack' ? '⚔️' : '🛡️'}</div>
+                            <div className="text-2xl font-black text-white drop-shadow-md text-center px-4">{animationData.cardName}</div>
+                            {animationData.value > 0 && <div className="text-4xl font-mono text-yellow-300 font-bold drop-shadow-lg">{animationData.value}</div>}
+                            <div className="text-sm font-bold text-white/90 bg-black/40 px-3 py-1 rounded-full mt-2">{animationData.msg}</div>
                         </div>
                     </div>
                 )}
@@ -796,25 +767,25 @@ const App: React.FC = () => {
                 {/* Context Messages */}
                 <div className="mt-auto px-6 pb-4 flex justify-center pointer-events-none z-10 md:mb-8">
                     {isHumanTurn && !amIBeingAttacked && !selectedCardIds.length && (
-                        <div className="bg-emerald-900/80 text-emerald-100 px-4 py-2 rounded-full text-xs font-bold shadow-lg border border-emerald-500/30 animate-pulse">
-                            你的回合
+                        <div className="bg-emerald-600 text-white px-6 py-2 rounded-full text-sm font-bold shadow-lg shadow-emerald-900/50 animate-pulse border border-emerald-400">
+                            輪到你了！
                         </div>
                     )}
                     {amIBeingAttacked && (
-                        <div className="bg-red-900/90 text-white px-6 py-3 rounded-2xl text-center shadow-2xl border border-red-500 animate-pulse pointer-events-auto">
-                            <div className="text-xs font-bold uppercase text-red-300 mb-1">敵方攻擊</div>
-                            <div className="text-3xl font-black font-mono">{gameState.pendingAttack?.damage}</div>
-                            <div className="text-[10px] mt-1 opacity-80">請選擇對應攻擊卡反擊</div>
-                            <button onClick={handleSkipDefense} className="mt-2 text-xs underline opacity-60 hover:opacity-100">直接承受</button>
+                        <div className="bg-red-600 text-white px-8 py-4 rounded-2xl text-center shadow-[0_0_30px_rgba(220,38,38,0.6)] border-2 border-red-400 animate-pulse pointer-events-auto transform scale-110">
+                            <div className="text-xs font-bold uppercase text-red-100 mb-1 tracking-widest">敵方攻擊來襲</div>
+                            <div className="text-4xl font-black font-mono drop-shadow-md">{gameState.pendingAttack?.damage}</div>
+                            <div className="text-xs mt-2 font-bold opacity-90">請選擇對應卡牌反擊</div>
+                            <button onClick={handleSkipDefense} className="mt-3 text-xs bg-red-800 hover:bg-red-900 px-3 py-1 rounded text-white font-bold transition-colors">直接承受傷害</button>
                         </div>
                     )}
                 </div>
           </div>
 
           {/* 3. PLAYER DASHBOARD & HAND (Fixed Bottom) */}
-          <div className="bg-slate-900 border-t border-slate-800 relative z-50 pb-safe">
+          <div className="bg-slate-900 border-t border-slate-800 relative z-50 pb-safe shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
               
-              {/* Active Card Inspector (Slide Up Panel) - MOBILE ONLY */}
+              {/* Active Card Inspector (Mobile) */}
               <div className={`
                   md:hidden absolute bottom-full left-0 right-0 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out z-20 flex flex-col
                   ${activeCard ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}
@@ -855,11 +826,11 @@ const App: React.FC = () => {
 
                           {/* Action Button */}
                           <div className="flex gap-3">
-                              <button onClick={() => setSelectedCardIds([])} className="px-4 py-3 bg-slate-800 rounded-xl font-bold text-slate-400">取消</button>
+                              <button onClick={() => setSelectedCardIds([])} className="px-4 py-3 bg-slate-800 rounded-xl font-bold text-slate-400 border border-slate-700">取消</button>
                               
-                              {/* Sell Button if single card */}
+                              {/* Sell Button */}
                               {isHumanTurn && selectedCardIds.length === 1 && (
-                                  <button onClick={handleSell} className="px-4 py-3 bg-yellow-900/30 text-yellow-500 rounded-xl font-bold border border-yellow-700/50 flex flex-col items-center justify-center leading-none min-w-[80px]">
+                                  <button onClick={handleSell} className="px-4 py-3 bg-yellow-900/20 text-yellow-500 rounded-xl font-bold border border-yellow-700/50 flex flex-col items-center justify-center leading-none min-w-[80px]">
                                       <span className="text-xs">出售</span>
                                       <span className="text-[10px] opacity-70">+{Math.floor(activeCard.cost/2)}G</span>
                                   </button>
@@ -869,7 +840,7 @@ const App: React.FC = () => {
                                   onClick={executePlay}
                                   disabled={!isHumanTurn && !amIBeingAttacked}
                                   className={`flex-1 py-3 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2
-                                      ${isHumanTurn || amIBeingAttacked ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}
+                                      ${isHumanTurn || amIBeingAttacked ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'}
                                   `}
                               >
                                   {amIBeingAttacked ? '反擊!' : '出牌'}
@@ -882,54 +853,25 @@ const App: React.FC = () => {
 
               {/* Stats Bar (Mobile) & Desktop Toolbar */}
               <div className="px-4 py-2 flex items-center justify-between border-b border-slate-800 bg-slate-950 relative z-30">
-                  <div className="flex gap-3 md:hidden">
-                      <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">HP</span>
-                          <div className="text-sm font-bold text-white flex items-center gap-1">
-                              <Heart size={12} className="text-red-500"/> {humanPlayer.hp}
+                  <div className="flex gap-4 md:hidden w-full justify-between items-center">
+                      <div className="flex gap-3">
+                          <div className="flex flex-col items-center">
+                              <span className="text-[8px] font-bold text-slate-500 uppercase">HP</span>
+                              <div className="text-xs font-bold text-white flex items-center gap-1">
+                                  <Heart size={10} className="text-red-500"/> {humanPlayer.hp}
+                              </div>
                           </div>
-                      </div>
-                      <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">MP</span>
-                          <div className="text-sm font-bold text-white flex items-center gap-1">
-                              <Zap size={12} className="text-blue-500"/> {humanPlayer.mana}
+                          <div className="flex flex-col items-center border-l border-slate-800 pl-3">
+                              <span className="text-[8px] font-bold text-slate-500 uppercase">MP</span>
+                              <div className="text-xs font-bold text-white flex items-center gap-1">
+                                  <Zap size={10} className="text-blue-500"/> {humanPlayer.mana}
+                              </div>
                           </div>
-                      </div>
-                      <div className="flex flex-col">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">Gold</span>
-                          <div className="text-sm font-bold text-white flex items-center gap-1">
-                              <Coins size={12} className="text-yellow-500"/> {humanPlayer.gold}
-                          </div>
-                      </div>
-                  </div>
-                  
-                  {/* Desktop Action Bar */}
-                  <div className="hidden md:flex gap-4 items-center">
-                      <button onClick={() => setShowShop(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 rounded-lg text-white font-bold hover:bg-indigo-500 transition-colors">
-                          <ShoppingBag size={16}/> 商店
-                      </button>
-                      <button 
-                          onClick={executePlay}
-                          disabled={!canPlay || (!isHumanTurn && !amIBeingAttacked)}
-                          className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all ${canPlay && (isHumanTurn || amIBeingAttacked) ? 'bg-green-600 text-white hover:bg-green-500 shadow-lg' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
-                      >
-                          {amIBeingAttacked ? '反擊!' : '出牌'} 
-                          {preview && preview.damage > 0 && <span className="bg-black/20 px-2 rounded text-xs font-mono">{preview.damage}</span>}
-                      </button>
-                      {selectedCardIds.length === 1 && isHumanTurn && (
-                          <button onClick={handleSell} className="text-yellow-500 text-xs font-bold hover:underline">出售卡牌</button>
-                      )}
-                      <button onClick={handleEndTurn} disabled={!isHumanTurn} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors ${isHumanTurn ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-slate-900 text-slate-600'}`}>
-                          結束回合
-                      </button>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                      {/* Soul Indicator */}
-                      <div className="flex flex-col items-end">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">Soul</span>
-                          <div className={`text-xs font-bold font-mono ${humanPlayer.soul > 0 ? 'text-yellow-400' : humanPlayer.soul < 0 ? 'text-purple-400' : 'text-slate-400'}`}>
-                              {humanPlayer.soul > 0 ? '+' : ''}{humanPlayer.soul}
+                          <div className="flex flex-col items-center border-l border-slate-800 pl-3">
+                              <span className="text-[8px] font-bold text-slate-500 uppercase">GOLD</span>
+                              <div className="text-xs font-bold text-white flex items-center gap-1">
+                                  <Coins size={10} className="text-yellow-500"/> {humanPlayer.gold}
+                              </div>
                           </div>
                       </div>
                       
@@ -939,15 +881,45 @@ const App: React.FC = () => {
                           <button onClick={()=>setMobileTab('board')} className={`p-1.5 rounded-md transition-colors ${mobileTab === 'board' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><LayoutTemplate size={16}/></button>
                       </div>
                   </div>
+                  
+                  {/* Desktop Action Bar */}
+                  <div className="hidden md:flex gap-4 items-center w-full justify-center">
+                      <button onClick={() => setShowShop(true)} className="flex items-center gap-2 px-6 py-3 bg-indigo-600 rounded-xl text-white font-bold hover:bg-indigo-500 transition-all shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5">
+                          <ShoppingBag size={18}/> 商店
+                      </button>
+                      
+                      <div className="h-8 w-px bg-slate-700 mx-2"></div>
+
+                      <button 
+                          onClick={executePlay}
+                          disabled={!canPlay || (!isHumanTurn && !amIBeingAttacked)}
+                          className={`flex items-center gap-2 px-10 py-3 rounded-xl font-bold text-lg transition-all transform ${canPlay && (isHumanTurn || amIBeingAttacked) ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:shadow-lg hover:-translate-y-0.5 shadow-green-900/20' : 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'}`}
+                      >
+                          {amIBeingAttacked ? '反擊!' : '出牌'} 
+                          {preview && preview.damage > 0 && <span className="bg-black/20 px-2 rounded text-sm font-mono ml-2">{preview.damage} DMG</span>}
+                      </button>
+                      
+                      {selectedCardIds.length === 1 && isHumanTurn && (
+                          <button onClick={handleSell} className="px-4 py-3 border border-yellow-600/50 text-yellow-500 text-sm font-bold rounded-xl hover:bg-yellow-900/20 transition-colors">
+                              出售
+                          </button>
+                      )}
+                      
+                      <div className="h-8 w-px bg-slate-700 mx-2"></div>
+
+                      <button onClick={handleEndTurn} disabled={!isHumanTurn} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-colors ${isHumanTurn ? 'bg-slate-700 text-white hover:bg-slate-600 border border-slate-500' : 'bg-slate-900 text-slate-700 border border-slate-800'}`}>
+                          結束回合
+                      </button>
+                  </div>
               </div>
 
               {/* Bottom Content Area */}
-              <div className="relative z-30 bg-slate-900 min-h-[160px] md:min-h-[220px]">
+              <div className="relative z-30 bg-slate-900 min-h-[160px] md:min-h-[260px]">
                   {mobileTab === 'hand' || window.innerWidth >= 768 ? (
                       // Hand View
-                      <div className="p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full md:justify-center md:pb-8">
+                      <div className="p-3 overflow-x-auto flex items-end gap-2 md:gap-4 px-4 scrollbar-hide h-full md:justify-center md:pb-10">
                          {humanPlayer.isDead ? (
-                             <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
+                             <div className="w-full text-center text-red-500 font-bold py-8 text-xl">已敗陣</div>
                          ) : (
                             humanPlayer.hand.map((card) => {
                                 const isSelected = selectedCardIds.includes(card.id);
@@ -964,7 +936,7 @@ const App: React.FC = () => {
                                 }
 
                                 return (
-                                    <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : 'md:hover:-translate-y-2'}`}>
+                                    <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-6 z-40' : 'hover:-translate-y-2 hover:z-30'}`}>
                                         <CardComponent 
                                             card={card} 
                                             lang={lang} 
@@ -972,7 +944,7 @@ const App: React.FC = () => {
                                             disabled={isDisabled} 
                                             compact={window.innerWidth < 768} 
                                         />
-                                        {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
+                                        {isSelected && <div className="absolute -top-3 right-0 bg-emerald-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={14} strokeWidth={4} /></div>}
                                     </div>
                                 );
                             })
