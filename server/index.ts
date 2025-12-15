@@ -203,7 +203,14 @@ io.on('connection', (socket: Socket) => {
                 healthMultiplier: 1,
                 damageMultiplier: 1,
                 priceMultiplier: 1,
-                rarityWeights: { common: 60, rare: 30, epic: 8, legendary: 2 }
+                rarityWeights: { common: 60, rare: 30, epic: 8, legendary: 2 },
+                manaRegenPerTurn: 15,
+                maxPlaysPerTurn: 3,
+                enableRandomEvents: true,
+                banRitualCards: false,
+                randomizeNations: false,
+                freeShopMode: false,
+                crazyMode: false
             }
         };
 

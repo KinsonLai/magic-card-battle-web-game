@@ -1,19 +1,22 @@
+
 import { io, Socket } from 'socket.io-client';
-import { ClientAction, GameState, RoomPlayer, RoomInfo, GameSettings, NationType } from '../types';
+import { ClientAction, GameState, RoomPlayer, RoomInfo, GameSettings } from '../types';
 
 class SocketService {
   private socket: Socket | null = null;
   private url: string = (import.meta as any).env?.VITE_SERVER_URL || 
                         ((import.meta as any).env?.PROD ? window.location.origin : 'http://localhost:3000');
   
+  // Buffer for listeners registered before connection or needing re-attachment
   private pendingListeners: Map<string, Array<(...args: any[]) => void>> = new Map();
 
   public connect(url?: string): Promise<void> {
     if (url) this.url = url;
     
     return new Promise((resolve, reject) => {
+      // If already connected, ensure listeners are up to date and resolve
       if (this.socket && this.socket.connected) {
-          this.flushPendingListeners(); 
+          this.flushPendingListeners(); // CRITICAL FIX: Always flush pending even if already connected
           resolve();
           return;
       }
@@ -40,6 +43,7 @@ class SocketService {
       if (!this.socket) return;
       this.pendingListeners.forEach((callbacks, event) => {
           callbacks.forEach(cb => {
+              // Prevent duplicates by turning off first (safe to call multiple times)
               this.socket?.off(event, cb);
               this.socket?.on(event, cb);
           });
@@ -61,7 +65,10 @@ class SocketService {
     return this.socket?.id;
   }
 
+  // --- Internal Helper for Event Management ---
+  
   private on(event: string, callback: (...args: any[]) => void): () => void {
+      // 1. Add to pending buffer
       if (!this.pendingListeners.has(event)) {
           this.pendingListeners.set(event, []);
       }
@@ -70,11 +77,13 @@ class SocketService {
           list.push(callback);
       }
 
+      // 2. If socket exists, attach immediately
       if (this.socket) {
-          this.socket.off(event, callback); 
+          this.socket.off(event, callback); // Safety check
           this.socket.on(event, callback);
       }
 
+      // 3. Return cleanup function
       return () => {
           const currentList = this.pendingListeners.get(event);
           if (currentList) {
@@ -120,10 +129,6 @@ class SocketService {
       this.socket?.emit('kick_player', targetId);
   }
 
-  public updatePlayerNation(targetId: string, nation: NationType) {
-      this.socket?.emit('update_player_nation', targetId, nation);
-  }
-
   public updateSettings(settings: GameSettings) {
       this.socket?.emit('update_settings', settings);
   }
@@ -149,6 +154,28 @@ class SocketService {
       return this.on('kicked', callback);
   }
 
+  public loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
+      this.socket?.emit('admin_login', { user, passHash }, callback);
+  }
+
+  // --- Admin Methods ---
+
+  public adminGetRooms() {
+      this.socket?.emit('admin_get_rooms');
+  }
+
+  public adminDeleteRoom(roomId: string) {
+      this.socket?.emit('admin_delete_room', roomId);
+  }
+
+  public adminJoinRoom(roomId: string, callback: (res: any) => void) {
+      this.socket?.emit('admin_join_room', roomId, callback);
+  }
+
+  public onAdminRoomList(callback: (rooms: any[]) => void) {
+      return this.on('admin_room_list', callback);
+  }
+
   // --- Game Events ---
 
   public onGameStart(callback: (initialState: GameState) => void) {
@@ -171,28 +198,6 @@ class SocketService {
 
   public onLog(callback: (msg: string) => void) {
       return this.on('server_log', (msg: string) => callback(msg));
-  }
-
-  // --- Admin Events ---
-
-  public loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
-      this.socket?.emit('admin_login', { user, passHash }, callback);
-  }
-
-  public onAdminRoomList(callback: (rooms: any[]) => void) {
-      return this.on('admin_room_list', callback);
-  }
-
-  public adminDeleteRoom(roomId: string) {
-      this.socket?.emit('admin_delete_room', roomId);
-  }
-
-  public adminJoinRoom(roomId: string, callback: (res: any) => void) {
-      this.socket?.emit('admin_join_room', roomId, callback);
-  }
-
-  public adminGetRooms() {
-      this.socket?.emit('admin_get_rooms');
   }
 }
 

@@ -11,11 +11,13 @@ export enum CardType {
   ATTACK = 'ATTACK', 
   MAGIC_ATTACK = 'MAGIC_ATTACK',
   HEAL = 'HEAL',
-  SPECIAL = 'SPECIAL',
+  SPECIAL = 'SPECIAL', // Kept for backward compatibility
   CONTRACT = 'CONTRACT',
   RUNE = 'RUNE', 
   RITUAL = 'RITUAL', 
-  ARTIFACT = 'ARTIFACT'
+  ARTIFACT = 'ARTIFACT',
+  BLESSING = 'BLESSING',
+  CURSE = 'CURSE'
 }
 
 export enum ElementType {
@@ -44,7 +46,7 @@ export enum Rarity {
   LEGENDARY = 'LEGENDARY'
 }
 
-export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact';
+export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact' | 'cleanse' | 'draw_cards';
 
 export interface Card {
   id: string;
@@ -155,12 +157,20 @@ export interface GameSettings {
   healthMultiplier: number;
   damageMultiplier: number;
   priceMultiplier: number;
-  rarityWeights?: {
+  rarityWeights: {
       common: number;
       rare: number;
       epic: number;
       legendary: number;
   };
+  // Advanced Settings
+  manaRegenPerTurn: number;
+  maxPlaysPerTurn: number;
+  enableRandomEvents: boolean;
+  banRitualCards: boolean;
+  randomizeNations: boolean;
+  freeShopMode: boolean; // Cost is 0
+  crazyMode: boolean; // Events every turn, double income/mana
 }
 
 export interface ActionEvent {
@@ -252,7 +262,7 @@ export type ClientAction =
   | { type: 'SEND_CHAT', message: string }
   | { type: 'ADMIN_COMMAND', command: string };
 
-export const MAX_LAND_SIZE = 3;
+export const MAX_LAND_SIZE = 3; // Changed from 5 to 3
 export const MAX_ARTIFACT_SIZE = 3;
 export const PLAYS_PER_TURN = 3;
 

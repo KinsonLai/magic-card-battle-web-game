@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { GameState, CardType, ElementType, StanceType, NationType } from '../types';
-import { executeCardEffect, executeAttackAction, resolveAttack, nextTurn, createInitialState } from '../services/gameEngine';
+import { executeCardEffect, executeAttackAction, resolveAttack, nextTurn, createInitialState, DEFAULT_SETTINGS } from '../services/gameEngine';
 import { CARDS } from '../constants';
 import { Terminal, Play, AlertCircle, CheckCircle, XCircle, RefreshCw, Cpu } from 'lucide-react';
 
@@ -29,6 +29,7 @@ export const DebugConsole: React.FC<DebugConsoleProps> = ({ gameState, setGameSt
                 { id: 'p2', name: 'Dummy', nation: NationType.HOLY, isHost: false, isBot: true, isReady: true }
             ];
             let state = createInitialState(mockPlayers, { 
+                ...DEFAULT_SETTINGS,
                 initialGold: 1000, initialMana: 100, maxPlayers: 2, cardsDrawPerTurn: 5, maxHandSize: 10, 
                 incomeMultiplier: 1, eventFrequency: 99, isMultiplayer: false, shopSize: 3, 
                 healthMultiplier: 1, damageMultiplier: 1, priceMultiplier: 1 

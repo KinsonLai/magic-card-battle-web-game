@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { NationType, GameSettings, Language, RoomPlayer, RoomInfo } from '../types';
 import { NATION_CONFIG } from '../constants';
 import { DEFAULT_SETTINGS } from '../services/gameEngine';
 import { socketService } from '../services/socketService';
 import { TRANSLATIONS } from '../locales';
-import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check, X, Sliders, Shield } from 'lucide-react';
+import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check, X, Sliders } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: (players: RoomPlayer[], settings: GameSettings, isOnline?: boolean) => void;
@@ -271,8 +272,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   const changePlayerNation = (targetId: string, nation: NationType) => {
       if (mode === 'online') {
-          socketService.updatePlayerNation(targetId, nation);
+          // Send request to server to update nation
+          // @ts-ignore - Assuming update_player_nation exists on server and socketService
+          socketService.socket?.emit('update_player_nation', targetId, nation);
           
+          // Optimistically update local if it's me
           if (targetId === myId) setMyNation(nation);
       } else {
           setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, nation: nation } : p));
@@ -493,10 +497,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                         </div>
                                                     )}
 
-                                                    {/* Admin Badge */}
                                                     {player.isAdmin && (
                                                         <div className="absolute top-3 left-3 flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-red-900/50 text-red-400 border-red-500/30 animate-pulse">
-                                                            <Shield size={10}/> ADMIN
+                                                            ⚡ ADMIN
                                                         </div>
                                                     )}
 
@@ -509,9 +512,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                                 {player.nation === NationType.MAGIC && <Zap size={20} className={NATION_CONFIG[player.nation].color} />}
                                                             </div>
                                                             <div>
-                                                                <div className={`font-bold text-base flex items-center gap-2 ${player.isAdmin ? 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-400 to-purple-500 drop-shadow-[0_0_5px_rgba(255,215,0,0.5)] animate-pulse' : 'text-white'}`}>
+                                                                <div className="font-bold text-white text-base flex items-center gap-2">
                                                                     {player.name}
-                                                                    {isMe && <span className="bg-indigo-600 text-[10px] text-white px-1.5 py-0.5 rounded shadow ml-2">YOU</span>}
+                                                                    {isMe && <span className="bg-indigo-600 text-[10px] px-1.5 py-0.5 rounded text-white shadow">YOU</span>}
                                                                 </div>
                                                                 <div className={`text-[10px] font-bold uppercase tracking-wider ${NATION_CONFIG[player.nation].color}`}>
                                                                     {getNationName(player.nation)}

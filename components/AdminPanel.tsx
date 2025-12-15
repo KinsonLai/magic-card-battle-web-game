@@ -11,6 +11,7 @@ interface AdminRoomInfo extends RoomInfo {
 
 interface AdminPanelProps {
     onClose: () => void;
+    onSimulation?: () => void; // Keep for compatibility if needed, though replaced by internal logic
 }
 
 type TabType = 'rooms' | 'logs' | 'simulation';

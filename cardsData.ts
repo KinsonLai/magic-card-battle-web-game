@@ -1,16 +1,16 @@
 
 export const cardsData = [
   // --- INDUSTRY (Buffed Income) ---
-  { "id": "small_shop", "name": "市場攤位", "type": "INDUSTRY", "rarity": "COMMON", "cost": 30, "manaCost": 0, "value": 15, "effectType": "income", "description": "每回合獲得 15 金錢", "element": "NEUTRAL" },
-  { "id": "farm", "name": "小麥農場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 50, "manaCost": 0, "value": 25, "effectType": "income", "description": "穩定的食物供應，每回合 +25 金錢", "element": "NEUTRAL" },
-  { "id": "logging_camp", "name": "伐木場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 40, "manaCost": 0, "value": 20, "effectType": "income", "description": "開採木材資源，每回合 +20 金錢", "element": "NEUTRAL" },
-  { "id": "fishery", "name": "近海漁場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 45, "manaCost": 0, "value": 22, "effectType": "income", "description": "捕撈海產，每回合 +22 金錢", "element": "NEUTRAL" },
-  { "id": "workshop", "name": "工坊", "type": "INDUSTRY", "rarity": "RARE", "cost": 80, "manaCost": 0, "value": 40, "effectType": "income", "description": "生產工具，每回合 +40 金錢", "element": "NEUTRAL" },
-  { "id": "foundry", "name": "鋼鐵鑄造廠", "type": "INDUSTRY", "rarity": "RARE", "cost": 90, "manaCost": 0, "value": 45, "effectType": "income", "description": "冶煉鋼鐵，每回合 +45 金錢", "element": "NEUTRAL" },
-  { "id": "mine", "name": "金礦", "type": "INDUSTRY", "rarity": "EPIC", "cost": 150, "manaCost": 0, "value": 75, "effectType": "income", "description": "挖掘黃金，每回合 +75 金錢", "element": "NEUTRAL" },
-  { "id": "mint", "name": "皇家造幣廠", "type": "INDUSTRY", "rarity": "EPIC", "cost": 200, "manaCost": 0, "value": 100, "effectType": "income", "description": "發行貨幣，每回合 +100 金錢", "element": "NEUTRAL" },
-  { "id": "bank", "name": "銀行總部", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 300, "manaCost": 0, "value": 150, "effectType": "income", "description": "金融中心，每回合 +150 金錢", "element": "NEUTRAL" },
-  { "id": "stock_exchange", "name": "證券交易所", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 400, "manaCost": 0, "value": 200, "effectType": "income", "description": "掌控全球經濟命脈，每回合 +200 金錢", "element": "NEUTRAL" },
+  { "id": "small_shop", "name": "市場攤位", "type": "INDUSTRY", "rarity": "COMMON", "cost": 30, "manaCost": 0, "value": 25, "effectType": "income", "description": "每回合獲得 25 金錢", "element": "NEUTRAL" },
+  { "id": "farm", "name": "小麥農場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 50, "manaCost": 0, "value": 40, "effectType": "income", "description": "穩定的食物供應，每回合 +40 金錢", "element": "NEUTRAL" },
+  { "id": "logging_camp", "name": "伐木場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 40, "manaCost": 0, "value": 35, "effectType": "income", "description": "開採木材資源，每回合 +35 金錢", "element": "NEUTRAL" },
+  { "id": "fishery", "name": "近海漁場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 45, "manaCost": 0, "value": 38, "effectType": "income", "description": "捕撈海產，每回合 +38 金錢", "element": "NEUTRAL" },
+  { "id": "workshop", "name": "工坊", "type": "INDUSTRY", "rarity": "RARE", "cost": 80, "manaCost": 0, "value": 60, "effectType": "income", "description": "生產工具，每回合 +60 金錢", "element": "NEUTRAL" },
+  { "id": "foundry", "name": "鋼鐵鑄造廠", "type": "INDUSTRY", "rarity": "RARE", "cost": 90, "manaCost": 0, "value": 70, "effectType": "income", "description": "冶煉鋼鐵，每回合 +70 金錢", "element": "NEUTRAL" },
+  { "id": "mine", "name": "金礦", "type": "INDUSTRY", "rarity": "EPIC", "cost": 150, "manaCost": 0, "value": 100, "effectType": "income", "description": "挖掘黃金，每回合 +100 金錢", "element": "NEUTRAL" },
+  { "id": "mint", "name": "皇家造幣廠", "type": "INDUSTRY", "rarity": "EPIC", "cost": 200, "manaCost": 0, "value": 140, "effectType": "income", "description": "發行貨幣，每回合 +140 金錢", "element": "NEUTRAL" },
+  { "id": "bank", "name": "銀行總部", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 300, "manaCost": 0, "value": 200, "effectType": "income", "description": "金融中心，每回合 +200 金錢", "element": "NEUTRAL" },
+  { "id": "stock_exchange", "name": "證券交易所", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 400, "manaCost": 0, "value": 300, "effectType": "income", "description": "掌控全球經濟命脈，每回合 +300 金錢", "element": "NEUTRAL" },
   
   // --- SUPPORT ---
   { "id": "minor_heal", "name": "輕微治療", "type": "HEAL", "rarity": "COMMON", "cost": 20, "manaCost": 15, "value": 20, "effectType": "heal", "description": "恢復少量生命值", "element": "WATER", "alignment": "HOLY" },
@@ -26,7 +26,27 @@ export const cardsData = [
   { "id": "investment", "name": "鮮血契約: 投資", "type": "CONTRACT", "rarity": "RARE", "cost": 0, "manaCost": 0, "value": 100, "hpCost": 25, "effectType": "gold_gain", "description": "犧牲 25HP 獲得一筆投資回報", "element": "EARTH", "alignment": "EVIL" },
   { "id": "dark_ritual", "name": "黑暗儀式", "type": "CONTRACT", "rarity": "EPIC", "cost": 0, "manaCost": 0, "value": 200, "hpCost": 50, "effectType": "gold_gain", "description": "犧牲 50HP 獲得巨額財富", "element": "FIRE", "alignment": "EVIL" },
   
-  // --- PHYSICAL ATTACKS ---
+  // --- BLESSINGS (New) ---
+  { "id": "bless_heal", "name": "神之撫摸", "type": "BLESSING", "rarity": "COMMON", "cost": 30, "manaCost": 10, "value": 30, "effectType": "heal", "description": "恢復 30 點生命值", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "bless_mana", "name": "清心咒", "type": "BLESSING", "rarity": "COMMON", "cost": 30, "manaCost": 0, "value": 30, "effectType": "mana", "description": "恢復 30 點魔力", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "bless_gold", "name": "幸運祝福", "type": "BLESSING", "rarity": "RARE", "cost": 50, "manaCost": 20, "value": 50, "effectType": "gold_gain", "description": "獲得 50 金錢", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "bless_cleanse", "name": "淨化之光", "type": "BLESSING", "rarity": "RARE", "cost": 60, "manaCost": 20, "value": 0, "effectType": "cleanse", "description": "清除流血與暈眩狀態", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "bless_draw", "name": "預知未來", "type": "BLESSING", "rarity": "EPIC", "cost": 100, "manaCost": 40, "value": 2, "effectType": "draw_cards", "description": "立即抽取 2 張卡牌", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "bless_shield", "name": "聖盾庇護", "type": "BLESSING", "rarity": "EPIC", "cost": 120, "manaCost": 50, "value": 1, "effectType": "equip_artifact", "description": "獲得 1 層科技護盾 (抵擋破壞)", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "bless_fullheal", "name": "天使之擁", "type": "BLESSING", "rarity": "LEGENDARY", "cost": 250, "manaCost": 100, "value": 0, "effectType": "full_restore_hp", "description": "完全恢復生命值", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "bless_power", "name": "神力灌注", "type": "BLESSING", "rarity": "LEGENDARY", "cost": 250, "manaCost": 80, "value": 20, "effectType": "buff_damage", "description": "永久增加 20 點傷害加成", "element": "NEUTRAL", "alignment": "HOLY" },
+
+  // --- CURSES (New) ---
+  { "id": "curse_pain", "name": "痛苦詛咒", "type": "CURSE", "rarity": "COMMON", "cost": 40, "manaCost": 15, "value": 15, "effectType": "damage", "description": "造成 15 點無視防禦的傷害", "element": "NEUTRAL", "alignment": "EVIL" },
+  { "id": "curse_drain", "name": "精神鞭笞", "type": "CURSE", "rarity": "COMMON", "cost": 40, "manaCost": 10, "value": 20, "effectType": "mana_burn", "description": "燒毀敵方 20 點魔力", "element": "NEUTRAL", "alignment": "EVIL" },
+  { "id": "curse_break", "name": "腐蝕酸液", "type": "CURSE", "rarity": "RARE", "cost": 80, "manaCost": 30, "value": 1, "effectType": "destroy_land", "description": "有 50% 機率破壞敵方一座產業", "element": "NEUTRAL", "alignment": "EVIL" },
+  { "id": "curse_steal", "name": "貪婪之握", "type": "CURSE", "rarity": "RARE", "cost": 70, "manaCost": 20, "value": 30, "effectType": "gold_steal", "description": "偷取敵方 30 金錢", "element": "NEUTRAL", "alignment": "EVIL" },
+  { "id": "curse_silence", "name": "靜默詛咒", "type": "CURSE", "rarity": "EPIC", "cost": 150, "manaCost": 60, "value": 50, "effectType": "mana_burn", "description": "燒毀敵方 50 點魔力", "element": "NEUTRAL", "alignment": "EVIL" },
+  { "id": "curse_petrify", "name": "石化凝視", "type": "CURSE", "rarity": "EPIC", "cost": 180, "manaCost": 70, "value": 1, "effectType": "stun", "description": "使敵方暈眩一回合", "element": "NEUTRAL", "alignment": "EVIL" },
+  { "id": "curse_doom", "name": "末日喪鐘", "type": "CURSE", "rarity": "LEGENDARY", "cost": 300, "manaCost": 100, "value": 80, "effectType": "damage", "description": "造成 80 點無視防禦的傷害", "element": "NEUTRAL", "alignment": "EVIL" },
+  { "id": "curse_void", "name": "虛空吞噬", "type": "CURSE", "rarity": "LEGENDARY", "cost": 350, "manaCost": 120, "value": 1, "effectType": "destroy_land", "description": "必定破壞敵方一座產業", "element": "NEUTRAL", "alignment": "EVIL" },
+
+  // --- PHYSICAL ATTACKS (Existing - No Changes to IDs to keep save compat) ---
   { "id": "wpn_iron_sword", "name": "鐵製長劍", "type": "ATTACK", "rarity": "COMMON", "cost": 20, "manaCost": 0, "value": 10, "holyBonus": 5, "evilBonus": 5, "effectType": "damage", "description": "基礎 10 / [光] +5 / [暗] +5", "element": "NEUTRAL" },
   { "id": "wpn_oak_staff", "name": "橡木棍", "type": "ATTACK", "rarity": "COMMON", "cost": 15, "manaCost": 0, "value": 8, "holyBonus": 6, "evilBonus": 2, "effectType": "damage", "description": "基礎 8 / [光] +6 / [暗] +2", "element": "NEUTRAL" },
   { "id": "wpn_rusty_dagger", "name": "生鏽匕首", "type": "ATTACK", "rarity": "COMMON", "cost": 15, "manaCost": 0, "value": 8, "holyBonus": 2, "evilBonus": 6, "effectType": "damage", "description": "基礎 8 / [光] +2 / [暗] +6", "element": "NEUTRAL" },
