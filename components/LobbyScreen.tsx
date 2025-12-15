@@ -38,7 +38,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
   const [roomCode] = useState(Math.random().toString(36).substring(2, 8).toUpperCase());
   const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
-  const [isStarting, setIsStarting] = useState(false); // New loading state for start button
+  const [isStarting, setIsStarting] = useState(false);
   
   const [myName, setMyName] = useState('Player 1');
   const [myNation, setMyNation] = useState<NationType>(NationType.FIGHTER);
@@ -78,7 +78,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   // Socket Listeners
   useEffect(() => {
       if (mode === 'online' && isConnected) {
-          socketService.onRoomUpdate((updatedPlayers, newHostId) => {
+          const unsubRoom = socketService.onRoomUpdate((updatedPlayers, newHostId) => {
               setPlayers(updatedPlayers);
               setHostId(newHostId);
               if (view === 'browser' && updatedPlayers.length > 0) {
@@ -86,10 +86,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               }
           });
           
-          socketService.onRoomsChanged(() => refreshRoomList());
-          socketService.onSettingsUpdate((newSettings) => setSettings(newSettings));
+          const unsubRooms = socketService.onRoomsChanged(() => refreshRoomList());
+          const unsubSettings = socketService.onSettingsUpdate((newSettings) => setSettings(newSettings));
           
-          socketService.onKicked(() => {
+          const unsubKicked = socketService.onKicked(() => {
               showToast("你被踢出了房間", 'error');
               setOnlineRoomId(null);
               setView('browser');
@@ -97,6 +97,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
           });
 
           refreshRoomList();
+
+          // Cleanup listeners on unmount or deps change
+          return () => {
+              unsubRoom();
+              unsubRooms();
+              unsubSettings();
+              unsubKicked();
+          };
       }
   }, [mode, isConnected, view]);
 
@@ -117,7 +125,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       } catch (e) {
           console.error("Connection failed", e);
           setIsConnected(false);
-          // Don't force local mode, just show error
           showToast("無法連接伺服器", 'error');
       } finally {
           setIsConnecting(false);
@@ -253,7 +260,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                   showToast(res.message || "無法開始遊戲", 'error');
                   setIsStarting(false);
               }
-              // If success, socketService.onGameStart will trigger and component will unmount/switch
+              // If success, socketService.onGameStart will trigger in App.tsx and this component will unmount
           });
       } else {
           onStart(players, settings, false);

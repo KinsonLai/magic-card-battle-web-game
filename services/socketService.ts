@@ -6,11 +6,20 @@ class SocketService {
   private socket: Socket | null = null;
   private url: string = (import.meta as any).env?.VITE_SERVER_URL || 
                         ((import.meta as any).env?.PROD ? window.location.origin : 'http://localhost:3000');
+  
+  // Buffer for listeners registered before connection or needing re-attachment
+  private pendingListeners: Map<string, Array<(...args: any[]) => void>> = new Map();
 
   public connect(url?: string): Promise<void> {
     if (url) this.url = url;
     
     return new Promise((resolve, reject) => {
+      // If already connected, resolve immediately
+      if (this.socket && this.socket.connected) {
+          resolve();
+          return;
+      }
+
       this.socket = io(this.url, {
         transports: ['websocket'],
         reconnectionAttempts: 3
@@ -18,6 +27,7 @@ class SocketService {
 
       this.socket.on('connect', () => {
         console.log('Socket connected:', this.socket?.id);
+        this.flushPendingListeners();
         resolve();
       });
 
@@ -26,6 +36,17 @@ class SocketService {
         reject(err);
       });
     });
+  }
+
+  private flushPendingListeners() {
+      if (!this.socket) return;
+      this.pendingListeners.forEach((callbacks, event) => {
+          callbacks.forEach(cb => {
+              // Prevent duplicates by turning off first
+              this.socket?.off(event, cb);
+              this.socket?.on(event, cb);
+          });
+      });
   }
 
   public disconnect() {
@@ -43,6 +64,36 @@ class SocketService {
     return this.socket?.id;
   }
 
+  // --- Internal Helper for Event Management ---
+  
+  private on(event: string, callback: (...args: any[]) => void): () => void {
+      // 1. Add to pending buffer
+      if (!this.pendingListeners.has(event)) {
+          this.pendingListeners.set(event, []);
+      }
+      const list = this.pendingListeners.get(event)!;
+      if (!list.includes(callback)) {
+          list.push(callback);
+      }
+
+      // 2. If socket exists, attach immediately
+      if (this.socket) {
+          this.socket.off(event, callback); // Safety check
+          this.socket.on(event, callback);
+      }
+
+      // 3. Return cleanup function
+      return () => {
+          const currentList = this.pendingListeners.get(event);
+          if (currentList) {
+              this.pendingListeners.set(event, currentList.filter(fn => fn !== callback));
+          }
+          if (this.socket) {
+              this.socket.off(event, callback);
+          }
+      };
+  }
+
   // --- Lobby Events ---
 
   public getRooms(callback: (rooms: RoomInfo[]) => void) {
@@ -50,7 +101,7 @@ class SocketService {
   }
 
   public onRoomsChanged(callback: () => void) {
-      this.socket?.on('rooms_changed', callback);
+      return this.on('rooms_changed', callback);
   }
 
   public createRoom(params: { player: Partial<RoomPlayer>, roomName: string, password?: string, isPublic: boolean }, callback: (roomId: string) => void) {
@@ -82,7 +133,7 @@ class SocketService {
   }
 
   public onSettingsUpdate(callback: (settings: GameSettings) => void) {
-      this.socket?.on('settings_update', callback);
+      return this.on('settings_update', callback);
   }
 
   public startGame(callback?: (res: {success: boolean, message?: string}) => void) {
@@ -92,25 +143,33 @@ class SocketService {
   }
 
   public onRoomUpdate(callback: (players: RoomPlayer[], hostId: string) => void) {
-    this.socket?.on('room_update', (data: { players: RoomPlayer[], hostId: string }) => {
+    // Wrapper to match signature, but we need to track the wrapper for removal
+    // Simplified: We assume the caller handles the arg destructuring if we pass raw data, 
+    // OR we use a consistent wrapper. 
+    // Here we use a trick: we just pass the raw event handler and let the caller deal with it? 
+    // No, existing code expects specific args.
+    
+    // We'll wrap it, but note that `off` might not work perfectly for anonymous wrappers unless we return the cleanup.
+    const wrapper = (data: { players: RoomPlayer[], hostId: string }) => {
         callback(data.players, data.hostId);
-    });
+    };
+    return this.on('room_update', wrapper);
   }
 
   public onKicked(callback: () => void) {
-      this.socket?.on('kicked', callback);
+      return this.on('kicked', callback);
   }
 
   // --- Game Events ---
 
   public onGameStart(callback: (initialState: GameState) => void) {
-    this.socket?.on('game_start', (state: GameState) => {
+    return this.on('game_start', (state: GameState) => {
         callback(state);
     });
   }
 
   public onStateUpdate(callback: (state: GameState) => void) {
-    this.socket?.on('state_update', (state: GameState) => {
+    return this.on('state_update', (state: GameState) => {
         callback(state);
     });
   }
@@ -122,7 +181,7 @@ class SocketService {
   }
 
   public onLog(callback: (msg: string) => void) {
-      this.socket?.on('server_log', (msg: string) => callback(msg));
+      return this.on('server_log', (msg: string) => callback(msg));
   }
 }
 
