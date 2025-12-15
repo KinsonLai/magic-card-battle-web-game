@@ -255,8 +255,18 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               return;
           }
           setIsStarting(true);
+          
+          // Timeout failsafe
+          const timeout = setTimeout(() => {
+              if (isStarting) {
+                  setIsStarting(false);
+                  showToast("伺服器回應超時，請重試", 'error');
+              }
+          }, 5000);
+
           socketService.startGame((res) => {
               if (!res.success) {
+                  clearTimeout(timeout);
                   showToast(res.message || "無法開始遊戲", 'error');
                   setIsStarting(false);
               }

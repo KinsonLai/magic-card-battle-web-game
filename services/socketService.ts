@@ -14,8 +14,9 @@ class SocketService {
     if (url) this.url = url;
     
     return new Promise((resolve, reject) => {
-      // If already connected, resolve immediately
+      // If already connected, ensure listeners are up to date and resolve
       if (this.socket && this.socket.connected) {
+          this.flushPendingListeners(); // CRITICAL FIX: Always flush pending even if already connected
           resolve();
           return;
       }
@@ -42,7 +43,7 @@ class SocketService {
       if (!this.socket) return;
       this.pendingListeners.forEach((callbacks, event) => {
           callbacks.forEach(cb => {
-              // Prevent duplicates by turning off first
+              // Prevent duplicates by turning off first (safe to call multiple times)
               this.socket?.off(event, cb);
               this.socket?.on(event, cb);
           });
@@ -143,13 +144,6 @@ class SocketService {
   }
 
   public onRoomUpdate(callback: (players: RoomPlayer[], hostId: string) => void) {
-    // Wrapper to match signature, but we need to track the wrapper for removal
-    // Simplified: We assume the caller handles the arg destructuring if we pass raw data, 
-    // OR we use a consistent wrapper. 
-    // Here we use a trick: we just pass the raw event handler and let the caller deal with it? 
-    // No, existing code expects specific args.
-    
-    // We'll wrap it, but note that `off` might not work perfectly for anonymous wrappers unless we return the cleanup.
     const wrapper = (data: { players: RoomPlayer[], hostId: string }) => {
         callback(data.players, data.hostId);
     };
