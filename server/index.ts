@@ -75,6 +75,23 @@ io.on('connection', (socket: Socket) => {
         }
     });
 
+    // --- Admin: Get Rooms Manual ---
+    socket.on('admin_get_rooms', () => {
+        if (!isAdmin) return;
+        const allRooms = Object.values(rooms).map(r => ({
+            id: r.id,
+            name: r.name,
+            playerCount: r.players.length,
+            maxPlayers: r.settings.maxPlayers,
+            isPublic: r.isPublic,
+            hasPassword: !!r.password,
+            hostName: r.players.find(p => p.isHost)?.name || 'Unknown',
+            status: r.state ? 'PLAYING' : 'WAITING',
+            settings: r.settings
+        }));
+        socket.emit('admin_room_list', allRooms);
+    });
+
     // --- Admin: Delete Room ---
     socket.on('admin_delete_room', (roomId: string) => {
         if (!isAdmin) return;
@@ -294,7 +311,9 @@ io.on('connection', (socket: Socket) => {
             botDifficulty: 'normal'
         };
 
+        // Insert at specific index if possible (basic array handling, ideally map slots)
         room.players.push(botPlayer);
+        
         io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
         io.to(currentRoomId).emit('server_log', `房主加入了 AI: ${botPlayer.name}`);
         io.emit('rooms_changed');
@@ -305,7 +324,8 @@ io.on('connection', (socket: Socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
-        if (!player || (!player.isHost && !player.isAdmin)) return; 
+        if (!player || (!player.isHost && !player.isAdmin)) return; // Admin can kick
+        if (targetId === player.id) return;
 
         const targetIndex = room.players.findIndex(p => p.id === targetId);
         if (targetIndex === -1) return;
@@ -502,6 +522,7 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('disconnect', () => {
+        // console.log(`User disconnected: ${socket.id}`);
         if (currentRoomId && rooms[currentRoomId]) {
             const room = rooms[currentRoomId];
             const wasHost = room.players.find(p => p.id === socket.id)?.isHost;
@@ -536,11 +557,6 @@ io.on('connection', (socket: Socket) => {
             io.emit('rooms_changed');
         }
     });
-});
-
-// SPA Fallback: Send index.html for any other requests (fixes /admin route)
-app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;

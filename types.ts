@@ -15,10 +15,7 @@ export enum CardType {
   CONTRACT = 'CONTRACT',
   RUNE = 'RUNE', 
   RITUAL = 'RITUAL', 
-  ARTIFACT = 'ARTIFACT',
-  MISSILE = 'MISSILE',
-  SHIELD = 'SHIELD',
-  MAGIC_DEFENSE = 'MAGIC_DEFENSE'
+  ARTIFACT = 'ARTIFACT'
 }
 
 export enum ElementType {
@@ -47,7 +44,7 @@ export enum Rarity {
   LEGENDARY = 'LEGENDARY'
 }
 
-export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact' | 'block_missile';
+export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact';
 
 export interface Card {
   id: string;
@@ -62,8 +59,10 @@ export interface Card {
   manaCost: number;
   description: string;
   value?: number; 
+  
   holyBonus?: number;
   evilBonus?: number;
+
   runeLevel?: number; 
   isDisposable?: boolean;
   eventPayload?: string; 
@@ -90,7 +89,6 @@ export interface Player {
   id: string;
   name: string;
   isHuman: boolean;
-  isAdmin?: boolean; // Admin flag
   nation: NationType;
   hp: number;
   maxHp: number;
@@ -107,15 +105,18 @@ export interface Player {
   isStunned: boolean;
   isBleeding?: boolean;
   techShield?: number;
+  
   soul: number; 
   elementMark: ElementType | null; 
   maxPlaysModifier?: number; 
+
   maxPlays: number; 
   shopDiscount?: boolean; 
   botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts'; 
   playsUsed: number;
   hasPurchasedInShop: boolean;
   currentStance?: StanceType;
+  isAdmin?: boolean;
 }
 
 export interface RoomPlayer {
@@ -125,8 +126,8 @@ export interface RoomPlayer {
   isHost: boolean;
   isBot: boolean;
   isReady: boolean; 
-  isAdmin?: boolean;
   botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts';
+  isAdmin?: boolean; 
 }
 
 export interface RoomInfo {
@@ -168,13 +169,13 @@ export interface ActionEvent {
   targetId: string | null;
   cardId: string; 
   cardsPlayed?: Card[]; 
-  type: CardType | 'REPEL' | 'REPLACE'; 
+  type: CardType | 'REPEL'; 
   totalValue?: number;
   timestamp: number;
   elementalModifier?: number;
   comboName?: string;
   reflectedDamage?: number; 
-  message?: string; // Enhanced message
+  message?: string;
 }
 
 export type ReactionType = 'SPREAD' | 'MIRE' | 'ANNIHILATION' | 'OVERLOAD' | 'PRIME';
@@ -211,7 +212,6 @@ export interface GameState {
   triggeredArtifacts?: string[]; 
   topNotification?: { message: string, type: 'event' | 'artifact' | 'info' | 'warning' | 'error' }; 
   
-  // Socket Extra
   roomId?: string;
   isMultiplayer?: boolean;
 }
@@ -221,15 +221,14 @@ export interface LogEntry {
   message: string;
   type: 'info' | 'combat' | 'event' | 'economy' | 'tutorial';
   timestamp: number;
-  data?: any; // For admin inspection
 }
 
 export interface ChatMessage {
   id: string;
   sender: string;
   text: string;
-  isAdmin?: boolean;
   isSystem?: boolean;
+  isAdmin?: boolean;
 }
 
 export interface BattleRecord {
@@ -243,17 +242,17 @@ export interface BattleRecord {
 
 export type ClientAction = 
   | { type: 'PLAY_CARD', cardId: string, targetId?: string }
-  | { type: 'REPLACE_LAND', cardId: string, slotIndex: number } // New Action
   | { type: 'ATTACK', cardIds: string[], targetId: string }
   | { type: 'REPEL', cardIds: string[] }
   | { type: 'TAKE_DAMAGE' }
   | { type: 'BUY_CARD', cardId: string }
   | { type: 'SELL_CARD', cardId: string }
   | { type: 'END_TURN' }
+  | { type: 'REPLACE_LAND', cardId: string, slotIndex: number }
   | { type: 'SEND_CHAT', message: string }
-  | { type: 'ADMIN_COMMAND', command: string, payload?: any };
+  | { type: 'ADMIN_COMMAND', command: string };
 
-export const MAX_LAND_SIZE = 3; // Changed from 5 to 3
+export const MAX_LAND_SIZE = 3;
 export const MAX_ARTIFACT_SIZE = 3;
 export const PLAYS_PER_TURN = 3;
 

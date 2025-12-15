@@ -109,7 +109,6 @@ export const createInitialState = (roomPlayers: RoomPlayer[], settings: GameSett
       id: rp.id,
       name: rp.name,
       isHuman: !rp.isBot,
-      isAdmin: rp.isAdmin,
       nation: rp.nation,
       hp: maxHp,
       maxHp: maxHp,
@@ -126,12 +125,14 @@ export const createInitialState = (roomPlayers: RoomPlayer[], settings: GameSett
       botDifficulty: rp.botDifficulty,
       playsUsed: 0,
       hasPurchasedInShop: false,
+      // SOUL SYSTEM
       soul: 0,
       elementMark: null,
       isBleeding: false,
       techShield: 0,
       maxPlays: PLAYS_PER_TURN,
-      shopDiscount: false
+      shopDiscount: false,
+      isAdmin: rp.isAdmin
     };
     p.calculatedIncome = calculatePlayerIncome(p, settings.incomeMultiplier);
     return p;
@@ -169,6 +170,8 @@ export const nextTurn = (state: GameState): GameState => {
 
   // --- HARD LIMIT CHECK ---
   if (nextTurnNum > MAX_TURNS) {
+      // Game Over by Time Limit
+      // Determine winner by HP
       const sortedPlayers = [...state.players].sort((a, b) => b.hp - a.hp);
       const winner = sortedPlayers[0];
       return {
@@ -261,6 +264,7 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
     });
 
     let maxPlays = PLAYS_PER_TURN;
+    // Apply Mire Effect (Slow)
     if (p.maxPlaysModifier) {
         maxPlays += p.maxPlaysModifier;
         logs.push({ id: Date.now().toString(), message: `${p.name} 受到泥沼影響，本回合行動次數減少！`, type: 'info', timestamp: Date.now() });
@@ -283,6 +287,7 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
         newGold = Math.floor(newGold);
     }
 
+    // Shop Discount for Soul +3 (Light State)
     const getsShopDiscount = pAfterEvent.soul === 3;
 
     return {
@@ -295,7 +300,7 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
         isStunned: false, 
         calculatedIncome: calcIncome,
         maxPlays,
-        maxPlaysModifier: 0, 
+        maxPlaysModifier: 0, // Reset modifier
         shopDiscount: getsShopDiscount
     };
   });
@@ -304,7 +309,7 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
   if (activePlayer && activePlayer.isStunned) {
       logs.push({ id: Date.now().toString(), message: `${activePlayer.name} 暈眩中，跳過此回合。`, type: 'combat', timestamp: Date.now() });
       const unStunnedPlayers = updatedPlayers.map((p, i) => i === nextIndex ? { ...p, isStunned: false } : p);
-      unStunnedPlayers[nextIndex].playsUsed = PLAYS_PER_TURN; 
+      unStunnedPlayers[nextIndex].playsUsed = PLAYS_PER_TURN; // Skip
       
       return {
           ...newState,
@@ -340,69 +345,16 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
   };
 };
 
-// New Helper Function for Replacing Lands
-export const replaceLand = (state: GameState, cardId: string, slotIndex: number): GameState => {
-    const playerIndex = state.currentPlayerIndex;
-    const player = state.players[playerIndex];
-    const card = player.hand.find(c => c.id === cardId);
-    
-    if (!card || card.type !== CardType.INDUSTRY) return state;
-    if (slotIndex < 0 || slotIndex >= MAX_LAND_SIZE || slotIndex >= player.lands.length) return state;
-
-    const newHand = player.hand.filter(c => c.id !== cardId);
-    let newLands = [...player.lands];
-    const oldLand = newLands[slotIndex];
-    newLands[slotIndex] = card;
-
-    const newPlayer = {
-        ...player,
-        hand: newHand,
-        lands: newLands,
-        mana: player.mana - card.manaCost,
-        playsUsed: player.playsUsed + 1
-    };
-
-    let newPlayers = [...state.players];
-    newPlayers[playerIndex] = newPlayer;
-
-    const logMsg = `${player.name} 將 ${oldLand.name} 改建為 ${card.name}。`;
-
-    return {
-        ...state,
-        players: newPlayers,
-        gameLog: [...state.gameLog, { id: Date.now().toString(), message: logMsg, type: 'info', timestamp: Date.now() }],
-        lastAction: {
-            id: Date.now().toString(),
-            sourceId: player.id,
-            targetId: null,
-            cardId: card.id,
-            cardsPlayed: [card],
-            type: 'REPLACE',
-            timestamp: Date.now()
-        }
-    };
-};
-
 export const executeCardEffect = (state: GameState, card: Card, targetId?: string): GameState => {
     const playerIndex = state.currentPlayerIndex;
     const player = state.players[playerIndex];
-    
-    // Check for land full logic FIRST
-    if (card.type === CardType.INDUSTRY && player.lands.length >= MAX_LAND_SIZE) {
-        // Just return state to signal frontend to open replacement UI, or handle via specific action
-        // Here we assume frontend checks length first. If it calls this, it implies adding to a non-full array
-        // or discarding the card if logic fails. 
-        // Update: This function executes the effect. If full, it should fail or just consume card.
-        // The frontend should handle the "Replace" decision and call replaceLand instead.
-        return state; 
-    }
-
     const newHand = player.hand.filter(c => c.id !== card.id);
     let newPlayers = [...state.players];
     
     let actualManaCost = card.manaCost;
     let actualHpCost = card.hpCost || 0;
     
+    // Soul Penalty: Opposite alignment costs HP
     let soulPenalty = 0;
     if (card.alignment) {
         if (player.soul > 0 && card.alignment === AlignmentType.EVIL) {
@@ -413,6 +365,7 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
     }
     actualHpCost += soulPenalty;
 
+    // Soul Update
     let newSoul = player.soul;
     if (card.alignment === AlignmentType.HOLY) newSoul = Math.min(3, newSoul + 1);
     if (card.alignment === AlignmentType.EVIL) newSoul = Math.max(-3, newSoul - 1);
@@ -435,10 +388,17 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
     const targetPlayerIndex = targetId ? newPlayers.findIndex(p => p.id === targetId) : -1;
     let targetPlayer = targetPlayerIndex >= 0 ? newPlayers[targetPlayerIndex] : null;
 
+    // Effect Logic
     if (card.type === CardType.INDUSTRY) {
         if (currentPlayer.lands.length < MAX_LAND_SIZE) {
             currentPlayer.lands = [...currentPlayer.lands, card];
             logMsg += `，建造了新的產業。`;
+        } else {
+            // Should be handled by REPLACE_LAND action, this is a fallback or for AI
+            // If AI or fallback, just discard the oldest one
+            const [removed, ...rest] = currentPlayer.lands;
+            currentPlayer.lands = [...rest, card];
+            logMsg += `，拆除舊產業並建造了新產業。`;
         }
         newPlayers[playerIndex] = currentPlayer;
     } 
@@ -447,7 +407,10 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
             currentPlayer.artifacts = [...currentPlayer.artifacts, card];
             logMsg += `，裝備了神器。`;
         } else {
-             logMsg += `，但神器欄位已滿。`;
+             // Simple logic for full artifacts: replace first
+             const [removed, ...rest] = currentPlayer.artifacts;
+             currentPlayer.artifacts = [...rest, card];
+             logMsg += `，替換了舊神器。`;
         }
         newPlayers[playerIndex] = currentPlayer;
     }
@@ -458,12 +421,8 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
         newPlayers[playerIndex] = currentPlayer;
     }
     else if (card.type === CardType.RITUAL) {
+        // Ritual Logic with Soul State requirement
         let canCast = false;
-        // Simplified Logic: Soul determines alignment, but allow cast anytime if matched
-        if (card.alignment === AlignmentType.HOLY && player.soul >= 1) canCast = true;
-        if (card.alignment === AlignmentType.EVIL && player.soul <= -1) canCast = true;
-        // Admin override or relaxed rules for gameplay flow if needed
-        // Reverting to strict rules per request but keeping costs low as requested in prompt (data file changed)
         if (card.alignment === AlignmentType.HOLY && player.soul === 3) canCast = true;
         if (card.alignment === AlignmentType.EVIL && player.soul === -3) canCast = true;
 
@@ -471,6 +430,7 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
              const randomEvent = EVENTS_LIST.find(e => e.id === card.eventPayload);
              const eventToTrigger = randomEvent || EVENTS_LIST[Math.floor(Math.random() * EVENTS_LIST.length)];
              
+             // Reset Soul
              currentPlayer.soul = 0;
              newPlayers[playerIndex] = currentPlayer;
 
@@ -526,6 +486,60 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
     };
 };
 
+export const replaceLand = (state: GameState, newCardId: string, slotIndex: number): GameState => {
+    const playerIndex = state.currentPlayerIndex;
+    const player = state.players[playerIndex];
+    
+    // Find card in hand
+    const cardIndex = player.hand.findIndex(c => c.id === newCardId);
+    if (cardIndex === -1) return state;
+    
+    const card = player.hand[cardIndex];
+    const newHand = [...player.hand];
+    newHand.splice(cardIndex, 1);
+
+    // Validate slot
+    if (slotIndex < 0 || slotIndex >= player.lands.length) return state;
+
+    // Costs
+    const newPlayer = {
+        ...player,
+        hand: newHand,
+        mana: player.mana - card.manaCost,
+        hp: player.hp - (card.hpCost || 0),
+        playsUsed: player.playsUsed + 1
+    };
+
+    // Replace land
+    const oldLand = newPlayer.lands[slotIndex];
+    const newLands = [...newPlayer.lands];
+    newLands[slotIndex] = card;
+    newPlayer.lands = newLands;
+
+    const newPlayers = [...state.players];
+    newPlayers[playerIndex] = newPlayer;
+
+    return {
+        ...state,
+        players: newPlayers,
+        gameLog: [...state.gameLog, { 
+            id: Date.now().toString(), 
+            message: `${player.name} 拆除了 ${oldLand.name} 並建造了 ${card.name}。`, 
+            type: 'economy', 
+            timestamp: Date.now() 
+        }],
+        lastAction: {
+            id: Date.now().toString(),
+            sourceId: player.id,
+            targetId: null,
+            cardId: card.id,
+            cardsPlayed: [card],
+            type: CardType.INDUSTRY,
+            timestamp: Date.now()
+        }
+    };
+};
+
 export const executeAttackAction = (state: GameState, cards: Card[], targetId: string): GameState => {
     const playerIndex = state.currentPlayerIndex;
     const player = state.players[playerIndex];
@@ -545,10 +559,12 @@ export const executeAttackAction = (state: GameState, cards: Card[], targetId: s
     const weapon = !isMagicAttack ? cards.find(c => c.type === CardType.ATTACK) : null;
     const runes = !isMagicAttack ? cards.filter(c => c.type === CardType.RUNE) : [];
 
+    // --- Calculation ---
     for (const c of cards) {
         totalManaCost += c.manaCost;
         totalHpCost += (c.hpCost || 0);
         
+        // Soul Update Accumulation (Runes/Magic might have alignment)
         if (c.alignment === AlignmentType.HOLY) soulDelta++;
         if (c.alignment === AlignmentType.EVIL) soulDelta--;
 
@@ -557,11 +573,20 @@ export const executeAttackAction = (state: GameState, cards: Card[], targetId: s
     }
 
     if (isMagicAttack) {
+        // Simple Sum for Magic
         baseDamage = cards.reduce((sum, c) => sum + (c.value || 0), 0);
     } else if (weapon) {
+        // Physical Calculation with Dual Effects
         baseDamage = (weapon.value || 0);
-        if (player.soul > 0) baseDamage += (weapon.holyBonus || 0);
-        else if (player.soul < 0) baseDamage += (weapon.evilBonus || 0);
+        
+        // Apply Weapon Alignment Bonus based on Player Soul
+        if (player.soul > 0) {
+            baseDamage += (weapon.holyBonus || 0);
+        } else if (player.soul < 0) {
+            baseDamage += (weapon.evilBonus || 0);
+        }
+
+        // Add Rune Values
         const runeDamage = runes.reduce((sum, r) => sum + (r.value || 0), 0);
         baseDamage += runeDamage;
     }
@@ -572,30 +597,36 @@ export const executeAttackAction = (state: GameState, cards: Card[], targetId: s
     let attackElement = elements.length > 0 ? elements[0] : ElementType.NEUTRAL;
     let finalDamage = Math.floor((baseDamage + player.damageBonus) * state.settings.damageMultiplier);
 
+    // REACTION LOGIC (Determine potential reaction)
     let reaction: ReactionType | undefined = undefined;
     let reactionEffectValue = 0;
     const targetMark = target.elementMark;
 
     if (targetMark && attackElement !== ElementType.NEUTRAL && attackElement !== targetMark) {
         const set = new Set([targetMark, attackElement]);
+        
+        // Spread (Fire + Air)
         if (set.has(ElementType.FIRE) && set.has(ElementType.AIR)) {
             reaction = 'SPREAD';
         }
+        // Mire (Earth + Water)
         else if (set.has(ElementType.EARTH) && set.has(ElementType.WATER)) {
             reaction = 'MIRE';
         }
+        // Annihilation (Opposites: Fire/Water, Earth/Air)
         else if ((set.has(ElementType.FIRE) && set.has(ElementType.WATER)) || (set.has(ElementType.EARTH) && set.has(ElementType.AIR))) {
             reaction = 'ANNIHILATION';
-            reactionEffectValue = Math.floor(finalDamage * 0.25); 
+            reactionEffectValue = Math.floor(finalDamage * 0.25); // Self damage
             finalDamage = Math.floor(finalDamage * 1.5);
         }
+        // Overload (Complements: Fire/Earth, Water/Air, etc - simpler: remaining pairs)
         else {
             reaction = 'OVERLOAD';
-            reactionEffectValue = 10; 
+            reactionEffectValue = 10; // Heal amount
             finalDamage = Math.floor(finalDamage * 1.25);
         }
     } else if (!targetMark && attackElement !== ElementType.NEUTRAL) {
-        reaction = 'PRIME'; 
+        reaction = 'PRIME'; // Not a full reaction, but applies mark
     }
 
     const newHand = player.hand.filter(c => !cards.find(played => played.id === c.id));
@@ -618,6 +649,7 @@ export const executeAttackAction = (state: GameState, cards: Card[], targetId: s
     }
     if (reaction === 'PRIME') logMsg += ` [掛載印記: ${attackElement}]`;
     
+    // Log bonus info for physical
     if (!isMagicAttack && weapon) {
         if (player.soul > 0 && weapon.holyBonus) logMsg += ` (光明加成 +${weapon.holyBonus})`;
         if (player.soul < 0 && weapon.evilBonus) logMsg += ` (黑暗加成 +${weapon.evilBonus})`;
@@ -669,17 +701,20 @@ export const resolveAttack = (state: GameState, cardsPlayed: Card[], _isRepel: b
     let newDefender = { ...defender };
     let newAttacker = { ...attacker };
     
+    // Defender Costs
     const totalMana = cardsPlayed.reduce((acc, c) => acc + c.manaCost, 0);
     const totalHpCost = cardsPlayed.reduce((acc, c) => acc + (c.hpCost || 0), 0);
     newDefender.mana -= totalMana;
     newDefender.hp -= totalHpCost;
     
+    // Defender Soul Update
     let soulDelta = 0;
     cardsPlayed.forEach(c => {
         if (c.alignment === AlignmentType.HOLY) soulDelta++;
         if (c.alignment === AlignmentType.EVIL) soulDelta--;
     });
     newDefender.soul = Math.max(-3, Math.min(3, newDefender.soul + soulDelta));
+    // Remove played cards
     const playedIds = cardsPlayed.map(c => c.id);
     newDefender.hand = newDefender.hand.filter(c => !playedIds.includes(c.id));
 
@@ -687,6 +722,7 @@ export const resolveAttack = (state: GameState, cardsPlayed: Card[], _isRepel: b
     let repelDamage = 0;
     let logMessage = '';
 
+    // Calculate Repel (Simplified: Sum of played attack cards)
     let counterPower = 0;
     const isMagicRepel = cardsPlayed[0]?.type === CardType.MAGIC_ATTACK;
     const weapon = !isMagicRepel ? cardsPlayed.find(c => c.type === CardType.ATTACK) : null;
@@ -701,10 +737,12 @@ export const resolveAttack = (state: GameState, cardsPlayed: Card[], _isRepel: b
         counterPower += runes.reduce((sum, r) => sum + (r.value || 0), 0);
     }
 
+    // Add damage bonus
     counterPower += newDefender.damageBonus;
 
     const damageDiff = counterPower - incomingDamage;
 
+    // Resolve Damage
     if (damageDiff >= 0) {
         repelDamage = damageDiff;
         logMessage += ` 反擊成功！抵消傷害並反彈 ${repelDamage}。`;
@@ -714,11 +752,13 @@ export const resolveAttack = (state: GameState, cardsPlayed: Card[], _isRepel: b
         newDefender.hp -= damageTaken;
         logMessage += ` 反擊不足，承受 ${damageTaken} 點傷害。`;
 
+        // APPLY REACTION EFFECTS IF DAMAGE TAKEN
         if (attack.reaction) {
             if (attack.reaction === 'PRIME') {
                 newDefender.elementMark = attack.element;
                 logMessage += ` [印記掛載: ${attack.element}]`;
             } else {
+                // Detonate: Reaction happened, clear mark
                 newDefender.elementMark = null;
                 logMessage += ` [印記引爆]`;
 
@@ -733,7 +773,7 @@ export const resolveAttack = (state: GameState, cardsPlayed: Card[], _isRepel: b
                         logMessage += ` 擴散：造成流血！`;
                     }
                 } else if (attack.reaction === 'MIRE') {
-                    newDefender.maxPlaysModifier = -1; 
+                    newDefender.maxPlaysModifier = -1; // Reduce plays next turn
                     logMessage += ` 泥沼：行動遲緩，下回合只能出 2 張牌。`;
                 } else if (attack.reaction === 'ANNIHILATION') {
                     newAttacker.hp -= (attack.reactionEffectValue || 0);
@@ -768,7 +808,7 @@ export const resolveAttack = (state: GameState, cardsPlayed: Card[], _isRepel: b
             type: 'REPEL', 
             totalValue: counterPower,
             timestamp: Date.now(),
-            message: logMessage // Pass detailed message for toast
+            message: logMessage // Added details for notification
         },
         winnerId: newPlayers.filter(p => !p.isDead).length <= 1 ? newPlayers.find(p => !p.isDead)?.id || null : null
     };
@@ -800,7 +840,7 @@ export const buyCard = (state: GameState, card: Card): GameState => {
         gold: player.gold - finalCost,
         hand: [...player.hand, newCard],
         hasPurchasedInShop: true,
-        shopDiscount: false 
+        shopDiscount: false // Consume discount
     };
 
     let newPlayers = [...state.players];

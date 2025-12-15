@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../locales';
-import { Swords, Image, Sparkles, HelpCircle, User } from 'lucide-react';
+import { Swords, Image, Sparkles, HelpCircle, User, Save, Lock, ShieldAlert } from 'lucide-react';
 
 interface StartScreenProps {
   onHost: () => void;
@@ -10,25 +10,28 @@ interface StartScreenProps {
   lang: Language;
   setLang: (l: Language) => void;
   onGuide: () => void;
-  onSim: () => void;
+  onSim: () => void; // Kept for type compatibility but button moved/hidden based on requirement
   onAdmin: () => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lang, onGuide, onSim, onAdmin }) => {
   const t = TRANSLATIONS['zh-TW']; 
-  const [name, setName] = useState('');
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [playerName, setPlayerName] = useState('');
 
   useEffect(() => {
-      // Load name from cookie
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
-      if (savedName) setName(savedName);
+      if (!savedName) {
+          setShowNameModal(true);
+      } else {
+          setPlayerName(savedName);
+      }
   }, []);
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newVal = e.target.value;
-      setName(newVal);
-      // Save to cookie (1 year expiry)
-      document.cookie = `player_name=${newVal}; path=/; max-age=31536000`;
+  const saveName = () => {
+      if (!playerName.trim()) return;
+      document.cookie = `player_name=${playerName}; max-age=2592000; path=/`; // 30 days
+      setShowNameModal(false);
   };
 
   return (
@@ -41,7 +44,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
           <div className="absolute bottom-[-10%] left-[20%] w-[600px] h-[600px] bg-blue-600/20 rounded-full mix-blend-screen filter blur-[100px] animate-blob animation-delay-4000"></div>
       </div>
 
-      <div className="max-w-md w-full space-y-10 text-center relative z-10 flex flex-col items-center">
+      <div className="max-w-md w-full space-y-12 text-center relative z-10 flex flex-col items-center">
         
         {/* Title Section */}
         <div className="space-y-4 animate-fade-in-up">
@@ -55,16 +58,13 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
           <p className="text-slate-400 text-sm md:text-base font-light tracking-wide max-w-xs mx-auto leading-relaxed">{t.subtitle}</p>
         </div>
 
-        {/* Name Input */}
-        <div className="w-full relative group">
-            <User className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" size={20}/>
-            <input 
-                value={name} 
-                onChange={handleNameChange}
-                placeholder="請輸入你的名字..." 
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-center text-white placeholder:text-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
-            />
-        </div>
+        {/* Player Greeting */}
+        {!showNameModal && (
+            <div className="animate-fade-in flex items-center gap-2 text-slate-400 bg-slate-900/50 px-4 py-2 rounded-full border border-slate-800 cursor-pointer hover:bg-slate-800 transition-colors" onClick={() => setShowNameModal(true)}>
+                <User size={14}/> 
+                <span className="text-sm">歡迎, <span className="text-white font-bold">{playerName}</span></span>
+            </div>
+        )}
 
         {/* Main Actions */}
         <div className="w-full space-y-4">
@@ -99,13 +99,41 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
         </div>
       </div>
       
-      {/* Footer */}
+      {/* Footer / Admin Entry */}
       <div className="absolute bottom-6 flex flex-col items-center gap-2 text-slate-600">
-          <div className="flex items-center gap-2 text-xs font-medium opacity-60">
-              <span className="text-slate-400">Created by KinsonLai</span>
-          </div>
-          <div className="text-[10px] font-mono opacity-40">v2.1.2</div>
+          <button onClick={onAdmin} className="opacity-30 hover:opacity-100 transition-opacity p-2">
+              <ShieldAlert size={16}/>
+          </button>
+          <div className="text-[10px] font-mono opacity-40">v2.1.0 | Admin System</div>
       </div>
+
+      {/* Name Entry Modal */}
+      {showNameModal && (
+          <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 p-8 rounded-3xl w-full max-w-sm text-center shadow-2xl animate-fade-in-up">
+                  <User size={48} className="mx-auto text-indigo-500 mb-4"/>
+                  <h2 className="text-2xl font-bold text-white mb-2">{t.enterName}</h2>
+                  <p className="text-slate-400 text-xs mb-6">請輸入您在遊戲中顯示的名稱</p>
+                  
+                  <input 
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    placeholder="例如: 魔法學徒"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-white mb-4 focus:border-indigo-500 outline-none transition-colors"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && saveName()}
+                  />
+                  
+                  <button 
+                    onClick={saveName}
+                    disabled={!playerName.trim()}
+                    className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${playerName.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
+                  >
+                      <Save size={18}/> 確認
+                  </button>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

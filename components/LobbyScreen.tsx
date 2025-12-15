@@ -1,11 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { NationType, GameSettings, Language, RoomPlayer, RoomInfo } from '../types';
 import { NATION_CONFIG } from '../constants';
 import { DEFAULT_SETTINGS } from '../services/gameEngine';
 import { socketService } from '../services/socketService';
 import { TRANSLATIONS } from '../locales';
-import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check, X, Sliders } from 'lucide-react';
+import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check, X, Sliders, Shield } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: (players: RoomPlayer[], settings: GameSettings, isOnline?: boolean) => void;
@@ -61,20 +60,20 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   // --- Effects ---
 
-  // Load Name from Cookie
+  // Load Name from Cookie on Mount
   useEffect(() => {
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
       if (savedName) setMyName(savedName);
   }, []);
 
-  // Local Mode Sync: Keep 'host_user' synced with local inputs
+  // Sync Local Player info (Name change) for Local Mode
   useEffect(() => {
       if (mode === 'local') {
         setPlayers(prev => prev.map(p => p.id === 'host_user' ? { ...p, name: myName, nation: myNation } : p));
       }
   }, [myName, myNation, mode]);
 
-  // Online Connection
+  // Initial connection if online
   useEffect(() => {
       if (mode === 'online') {
           if (!isConnected && !isConnecting) {
@@ -90,7 +89,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
               setPlayers(updatedPlayers);
               setHostId(newHostId);
               
-              // Only sync nation from server if it exists to avoid overwriting local selection before join
+              // Ensure myNation matches server state if needed (optional, or trust UI)
               const myP = updatedPlayers.find(p => p.id === socketService.getId());
               if (myP) setMyNation(myP.nation);
 
@@ -167,6 +166,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       if (!isConnected) return;
       if (!newRoomName.trim()) { showToast("請輸入房間名稱", 'error'); return; }
 
+      // Get cookie name if available (Redundant if useEffect worked, but safe)
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
       const finalName = savedName || myName;
 
@@ -227,6 +227,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
       }
   };
 
+  // --- Room Logic ---
+
   const handleToggleReady = () => {
       if (mode === 'online') {
           socketService.toggleReady();
@@ -269,9 +271,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   const changePlayerNation = (targetId: string, nation: NationType) => {
       if (mode === 'online') {
-          // Send request to server to update nation
-          // @ts-ignore
-          socketService.socket?.emit('update_player_nation', targetId, nation);
+          socketService.updatePlayerNation(targetId, nation);
           
           if (targetId === myId) setMyNation(nation);
       } else {
@@ -423,7 +423,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                 </div>
                                 
                                 <div 
-                                    onClick={() => setShowNationModal({ show: true, targetId: myId })} 
+                                    onClick={() => setShowNationModal({ show: true, targetId: 'host_user' })} 
                                     className="w-full bg-slate-950 border border-slate-700 hover:border-slate-500 rounded-xl p-3 cursor-pointer transition-all group relative overflow-hidden"
                                 >
                                     <div className={`absolute inset-0 opacity-10 ${NATION_CONFIG[myNation].bgColor}`}></div>
@@ -460,12 +460,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                     const isHost = player?.isHost;
                                     const isMe = mode === 'online' ? player?.id === myId : player?.id === 'host_user';
                                     const isEmpty = !player;
+                                    
+                                    // Logic: Only show "Add Bot" on the FIRST empty slot
+                                    const isFirstEmpty = isEmpty && players.length === i;
 
                                     return (
                                         <div key={i} className={`relative h-40 rounded-2xl border-2 transition-all group ${isEmpty ? 'border-slate-800 bg-slate-900/20 border-dashed hover:border-slate-700' : 'bg-slate-900 border-slate-700 shadow-xl'}`}>
                                             {isEmpty ? (
                                                 <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 gap-2">
-                                                    {amIHost ? (
+                                                    {amIHost && isFirstEmpty ? (
                                                         <button onClick={handleAddBot} className="flex flex-col items-center gap-2 group-hover:scale-110 transition-transform">
                                                             <div className="p-3 rounded-full bg-slate-800 text-slate-400 group-hover:text-indigo-400 group-hover:bg-indigo-900/20 transition-colors">
                                                                 <Bot size={24}/>
@@ -490,9 +493,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                         </div>
                                                     )}
 
+                                                    {/* Admin Badge */}
                                                     {player.isAdmin && (
                                                         <div className="absolute top-3 left-3 flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-red-900/50 text-red-400 border-red-500/30 animate-pulse">
-                                                            ⚡ ADMIN
+                                                            <Shield size={10}/> ADMIN
                                                         </div>
                                                     )}
 
@@ -505,9 +509,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                                 {player.nation === NationType.MAGIC && <Zap size={20} className={NATION_CONFIG[player.nation].color} />}
                                                             </div>
                                                             <div>
-                                                                <div className="font-bold text-white text-base flex items-center gap-2">
+                                                                <div className={`font-bold text-base flex items-center gap-2 ${player.isAdmin ? 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-red-400 to-purple-500 drop-shadow-[0_0_5px_rgba(255,215,0,0.5)] animate-pulse' : 'text-white'}`}>
                                                                     {player.name}
-                                                                    {isMe && <span className="bg-indigo-600 text-[10px] px-1.5 py-0.5 rounded text-white shadow">YOU</span>}
+                                                                    {isMe && <span className="bg-indigo-600 text-[10px] text-white px-1.5 py-0.5 rounded shadow ml-2">YOU</span>}
                                                                 </div>
                                                                 <div className={`text-[10px] font-bold uppercase tracking-wider ${NATION_CONFIG[player.nation].color}`}>
                                                                     {getNationName(player.nation)}

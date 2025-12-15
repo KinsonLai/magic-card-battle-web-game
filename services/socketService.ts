@@ -1,6 +1,5 @@
-
 import { io, Socket } from 'socket.io-client';
-import { ClientAction, GameState, RoomPlayer, RoomInfo, GameSettings } from '../types';
+import { ClientAction, GameState, RoomPlayer, RoomInfo, GameSettings, NationType } from '../types';
 
 class SocketService {
   private socket: Socket | null = null;
@@ -21,7 +20,7 @@ class SocketService {
 
       this.socket = io(this.url, {
         transports: ['websocket'],
-        reconnectionAttempts: 5
+        reconnectionAttempts: 3
       });
 
       this.socket.on('connect', () => {
@@ -62,8 +61,6 @@ class SocketService {
     return this.socket?.id;
   }
 
-  // --- Internal Helper for Event Management ---
-  
   private on(event: string, callback: (...args: any[]) => void): () => void {
       if (!this.pendingListeners.has(event)) {
           this.pendingListeners.set(event, []);
@@ -123,6 +120,10 @@ class SocketService {
       this.socket?.emit('kick_player', targetId);
   }
 
+  public updatePlayerNation(targetId: string, nation: NationType) {
+      this.socket?.emit('update_player_nation', targetId, nation);
+  }
+
   public updateSettings(settings: GameSettings) {
       this.socket?.emit('update_settings', settings);
   }
@@ -174,16 +175,7 @@ class SocketService {
 
   // --- Admin Events ---
 
-  public async loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
-      if (!this.isConnected()) {
-          try {
-              await this.connect();
-          } catch (e) {
-              console.error("Connection failed during admin login");
-              callback(false);
-              return;
-          }
-      }
+  public loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
       this.socket?.emit('admin_login', { user, passHash }, callback);
   }
 
@@ -197,6 +189,10 @@ class SocketService {
 
   public adminJoinRoom(roomId: string, callback: (res: any) => void) {
       this.socket?.emit('admin_join_room', roomId, callback);
+  }
+
+  public adminGetRooms() {
+      this.socket?.emit('admin_get_rooms');
   }
 }
 
