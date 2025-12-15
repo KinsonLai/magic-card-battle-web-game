@@ -26,25 +26,41 @@ export const cardsData = [
   { "id": "investment", "name": "鮮血契約: 投資", "type": "CONTRACT", "rarity": "RARE", "cost": 0, "manaCost": 0, "value": 100, "hpCost": 25, "effectType": "gold_gain", "description": "犧牲 25HP 獲得一筆投資回報", "element": "EARTH", "alignment": "EVIL" },
   { "id": "dark_ritual", "name": "黑暗儀式", "type": "CONTRACT", "rarity": "EPIC", "cost": 0, "manaCost": 0, "value": 200, "hpCost": 50, "effectType": "gold_gain", "description": "犧牲 50HP 獲得巨額財富", "element": "FIRE", "alignment": "EVIL" },
   
-  // --- BLESSINGS (New) ---
-  { "id": "bless_heal", "name": "神之撫摸", "type": "BLESSING", "rarity": "COMMON", "cost": 30, "manaCost": 10, "value": 30, "effectType": "heal", "description": "恢復 30 點生命值", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "bless_mana", "name": "清心咒", "type": "BLESSING", "rarity": "COMMON", "cost": 30, "manaCost": 0, "value": 30, "effectType": "mana", "description": "恢復 30 點魔力", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "bless_gold", "name": "幸運祝福", "type": "BLESSING", "rarity": "RARE", "cost": 50, "manaCost": 20, "value": 50, "effectType": "gold_gain", "description": "獲得 50 金錢", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "bless_cleanse", "name": "淨化之光", "type": "BLESSING", "rarity": "RARE", "cost": 60, "manaCost": 20, "value": 0, "effectType": "cleanse", "description": "清除流血與暈眩狀態", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "bless_draw", "name": "預知未來", "type": "BLESSING", "rarity": "EPIC", "cost": 100, "manaCost": 40, "value": 2, "effectType": "draw_cards", "description": "立即抽取 2 張卡牌", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "bless_shield", "name": "聖盾庇護", "type": "BLESSING", "rarity": "EPIC", "cost": 120, "manaCost": 50, "value": 1, "effectType": "equip_artifact", "description": "獲得 1 層科技護盾 (抵擋破壞)", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "bless_fullheal", "name": "天使之擁", "type": "BLESSING", "rarity": "LEGENDARY", "cost": 250, "manaCost": 100, "value": 0, "effectType": "full_restore_hp", "description": "完全恢復生命值", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "bless_power", "name": "神力灌注", "type": "BLESSING", "rarity": "LEGENDARY", "cost": 250, "manaCost": 80, "value": 20, "effectType": "buff_damage", "description": "永久增加 20 點傷害加成", "element": "NEUTRAL", "alignment": "HOLY" },
+  // --- BLESSINGS (Buffs) ---
+  { 
+    "id": "bless_heal", "name": "天使守護", "type": "BLESSING", "rarity": "COMMON", "cost": 40, "manaCost": 20, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 30% 機率恢復 15 HP。", "element": "NEUTRAL", "alignment": "HOLY",
+    "stateData": { "id": "st_angel", "name": "天使守護", "type": "BLESSING", "description": "每回合 30% 機率恢復 15 HP", "icon": "Heart", "triggerChance": 0.3, "effectType": "heal", "effectValue": 15 }
+  },
+  { 
+    "id": "bless_gold", "name": "商神眷顧", "type": "BLESSING", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 40% 機率獲得 25 金錢。", "element": "EARTH", "alignment": "HOLY",
+    "stateData": { "id": "st_merchant", "name": "商神眷顧", "type": "BLESSING", "description": "每回合 40% 機率獲得 25 金錢", "icon": "Coins", "triggerChance": 0.4, "effectType": "gold_gain", "effectValue": 25 }
+  },
+  { 
+    "id": "bless_mana", "name": "魔力源泉", "type": "BLESSING", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 50% 機率恢復 10 魔力。", "element": "WATER", "alignment": "HOLY",
+    "stateData": { "id": "st_manasource", "name": "魔力源泉", "type": "BLESSING", "description": "每回合 50% 機率恢復 10 魔力", "icon": "Zap", "triggerChance": 0.5, "effectType": "mana_gain", "effectValue": 10 }
+  },
+  { 
+    "id": "bless_divine", "name": "神聖光輝", "type": "BLESSING", "rarity": "LEGENDARY", "cost": 200, "manaCost": 80, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 100% 機率恢復 20 HP。", "element": "NEUTRAL", "alignment": "HOLY",
+    "stateData": { "id": "st_divine", "name": "神聖光輝", "type": "BLESSING", "description": "每回合 100% 機率恢復 20 HP", "icon": "Sun", "triggerChance": 1.0, "effectType": "heal", "effectValue": 20 }
+  },
 
-  // --- CURSES (New) ---
-  { "id": "curse_pain", "name": "痛苦詛咒", "type": "CURSE", "rarity": "COMMON", "cost": 40, "manaCost": 15, "value": 15, "effectType": "damage", "description": "造成 15 點無視防禦的傷害", "element": "NEUTRAL", "alignment": "EVIL" },
-  { "id": "curse_drain", "name": "精神鞭笞", "type": "CURSE", "rarity": "COMMON", "cost": 40, "manaCost": 10, "value": 20, "effectType": "mana_burn", "description": "燒毀敵方 20 點魔力", "element": "NEUTRAL", "alignment": "EVIL" },
-  { "id": "curse_break", "name": "腐蝕酸液", "type": "CURSE", "rarity": "RARE", "cost": 80, "manaCost": 30, "value": 1, "effectType": "destroy_land", "description": "有 50% 機率破壞敵方一座產業", "element": "NEUTRAL", "alignment": "EVIL" },
-  { "id": "curse_steal", "name": "貪婪之握", "type": "CURSE", "rarity": "RARE", "cost": 70, "manaCost": 20, "value": 30, "effectType": "gold_steal", "description": "偷取敵方 30 金錢", "element": "NEUTRAL", "alignment": "EVIL" },
-  { "id": "curse_silence", "name": "靜默詛咒", "type": "CURSE", "rarity": "EPIC", "cost": 150, "manaCost": 60, "value": 50, "effectType": "mana_burn", "description": "燒毀敵方 50 點魔力", "element": "NEUTRAL", "alignment": "EVIL" },
-  { "id": "curse_petrify", "name": "石化凝視", "type": "CURSE", "rarity": "EPIC", "cost": 180, "manaCost": 70, "value": 1, "effectType": "stun", "description": "使敵方暈眩一回合", "element": "NEUTRAL", "alignment": "EVIL" },
-  { "id": "curse_doom", "name": "末日喪鐘", "type": "CURSE", "rarity": "LEGENDARY", "cost": 300, "manaCost": 100, "value": 80, "effectType": "damage", "description": "造成 80 點無視防禦的傷害", "element": "NEUTRAL", "alignment": "EVIL" },
-  { "id": "curse_void", "name": "虛空吞噬", "type": "CURSE", "rarity": "LEGENDARY", "cost": 350, "manaCost": 120, "value": 1, "effectType": "destroy_land", "description": "必定破壞敵方一座產業", "element": "NEUTRAL", "alignment": "EVIL" },
+  // --- CURSES (Debuffs) ---
+  { 
+    "id": "curse_pain", "name": "痛苦纏身", "type": "CURSE", "rarity": "COMMON", "cost": 40, "manaCost": 20, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 30% 機率受到 15 傷害。", "element": "NEUTRAL", "alignment": "EVIL",
+    "stateData": { "id": "st_pain", "name": "痛苦纏身", "type": "CURSE", "description": "每回合 30% 機率受到 15 傷害", "icon": "Skull", "triggerChance": 0.3, "effectType": "damage", "effectValue": 15 }
+  },
+  { 
+    "id": "curse_leak", "name": "魔力洩漏", "type": "CURSE", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 40% 機率流失 15 魔力。", "element": "FIRE", "alignment": "EVIL",
+    "stateData": { "id": "st_leak", "name": "魔力洩漏", "type": "CURSE", "description": "每回合 40% 機率流失 15 魔力", "icon": "ZapOff", "triggerChance": 0.4, "effectType": "mana_loss", "effectValue": 15 }
+  },
+  { 
+    "id": "curse_poverty", "name": "窮神附體", "type": "CURSE", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 40% 機率遺失 30 金錢。", "element": "AIR", "alignment": "EVIL",
+    "stateData": { "id": "st_poverty", "name": "窮神附體", "type": "CURSE", "description": "每回合 40% 機率遺失 30 金錢", "icon": "TrendingDown", "triggerChance": 0.4, "effectType": "gold_loss", "effectValue": 30 }
+  },
+  { 
+    "id": "curse_doom", "name": "死神印記", "type": "CURSE", "rarity": "LEGENDARY", "cost": 200, "manaCost": 80, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 50% 機率受到 40 真實傷害。", "element": "NEUTRAL", "alignment": "EVIL",
+    "stateData": { "id": "st_doom", "name": "死神印記", "type": "CURSE", "description": "每回合 50% 機率受到 40 傷害", "icon": "Ghost", "triggerChance": 0.5, "effectType": "damage", "effectValue": 40 }
+  },
 
   // --- PHYSICAL ATTACKS (Existing - No Changes to IDs to keep save compat) ---
   { "id": "wpn_iron_sword", "name": "鐵製長劍", "type": "ATTACK", "rarity": "COMMON", "cost": 20, "manaCost": 0, "value": 10, "holyBonus": 5, "evilBonus": 5, "effectType": "damage", "description": "基礎 10 / [光] +5 / [暗] +5", "element": "NEUTRAL" },

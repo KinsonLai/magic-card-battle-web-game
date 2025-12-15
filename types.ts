@@ -46,7 +46,18 @@ export enum Rarity {
   LEGENDARY = 'LEGENDARY'
 }
 
-export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact' | 'cleanse' | 'draw_cards';
+export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact' | 'cleanse' | 'draw_cards' | 'apply_state';
+
+export interface ActiveState {
+    id: string;
+    name: string;
+    type: 'BLESSING' | 'CURSE';
+    description: string;
+    icon: string; // Lucide icon name
+    triggerChance: number; // 0.0 to 1.0 (e.g. 0.3 for 30%)
+    effectType: 'heal' | 'damage' | 'gold_gain' | 'gold_loss' | 'mana_gain' | 'mana_loss';
+    effectValue: number;
+}
 
 export interface Card {
   id: string;
@@ -69,6 +80,9 @@ export interface Card {
   isDisposable?: boolean;
   eventPayload?: string; 
   purchasedByPlayerIds?: string[];
+  
+  // For State Cards
+  stateData?: ActiveState;
 }
 
 export interface GameEvent {
@@ -119,6 +133,9 @@ export interface Player {
   hasPurchasedInShop: boolean;
   currentStance?: StanceType;
   isAdmin?: boolean;
+  
+  // New System
+  activeStates: ActiveState[];
 }
 
 export interface RoomPlayer {

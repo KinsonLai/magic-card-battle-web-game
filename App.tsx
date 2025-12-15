@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GameState, Card, CardType, Language, GameSettings, RoomPlayer, MAX_LAND_SIZE, ChatMessage, MAX_ARTIFACT_SIZE, ElementType, PLAYS_PER_TURN, AlignmentType, StanceType } from './types';
+import { GameState, Card, CardType, Language, GameSettings, RoomPlayer, MAX_LAND_SIZE, ChatMessage, MAX_ARTIFACT_SIZE, ElementType, PLAYS_PER_TURN, AlignmentType, StanceType, ActiveState } from './types';
 import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, resolveAttack, buyCard, sellCard, replaceLand } from './services/gameEngine';
 import { socketService } from './services/socketService';
 import { StartScreen } from './components/StartScreen';
@@ -15,7 +15,7 @@ import { NATION_CONFIG, ELEMENT_CONFIG, ALIGNMENT_CONFIG, getComplexElementName 
 import { TRANSLATIONS } from './locales';
 import { getIconComponent } from './utils/iconMap';
 import * as Icons from 'lucide-react';
-import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi, AlertCircle, ChevronUp, ChevronDown, Repeat, Eye, LayoutTemplate } from 'lucide-react';
+import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi, AlertCircle, ChevronUp, ChevronDown, Repeat, Eye, LayoutTemplate, Ghost, ZapOff, TrendingDown } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [screen, setScreen] = useState<'start' | 'lobby' | 'gallery' | 'guide' | 'game' | 'simulation'>('start');
@@ -180,6 +180,21 @@ export const App: React.FC = () => {
 
   const preview = getPreviewStats();
 
+  const getStatusIcon = (state: ActiveState, small = false) => {
+      const Icon = getIconComponent(state.icon) || Icons.Circle;
+      const color = state.type === 'BLESSING' ? 'bg-yellow-500 text-white' : 'bg-purple-600 text-white';
+      return (
+          <div 
+            key={state.id} 
+            className={`rounded-full flex items-center justify-center shadow-md ${color} ${small ? 'w-4 h-4 p-0.5' : 'w-6 h-6 p-1'} cursor-help transition-transform hover:scale-110`}
+            title={`${state.name}: ${state.description}`}
+            onClick={(e) => { e.stopPropagation(); showWarning(`${state.name}: ${state.description}`); }}
+          >
+              <Icon size={small ? 10 : 14} />
+          </div>
+      );
+  };
+
   // --- Effects ---
   useEffect(() => { logEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.gameLog, showSidebar]);
   useEffect(() => { if (activeTab === 'chat') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.chat, activeTab, showSidebar]);
@@ -243,7 +258,7 @@ export const App: React.FC = () => {
                          if (card.type === CardType.ATTACK || card.type === CardType.MAGIC_ATTACK) {
                               if (target) newState = executeAttackAction(newState, [card], target.id);
                          } else {
-                             if (['heal', 'mana', 'full_restore_hp', 'buff_damage'].includes(card.effectType || '') || card.type === CardType.HEAL || card.type === CardType.ARTIFACT) {
+                             if (['heal', 'mana', 'full_restore_hp', 'buff_damage'].includes(card.effectType || '') || card.type === CardType.HEAL || card.type === CardType.ARTIFACT || card.type === CardType.BLESSING) {
                                  newState = executeCardEffect(newState, card, currentPlayer.id);
                              } else if (card.type === CardType.RITUAL) {
                                  newState = executeCardEffect(newState, card); 
@@ -510,7 +525,7 @@ export const App: React.FC = () => {
           if (gameState.isMultiplayer) {
               socketService.emitAction({ type: 'PLAY_CARD', cardId: selectedCardIds[0], targetId: targetId || undefined });
           } else {
-              if (['heal', 'mana', 'full_restore_hp', 'buff_damage', 'equip_artifact'].includes(selectedCards[0].effectType || '') || selectedCards[0].type === CardType.HEAL || selectedCards[0].type === CardType.ARTIFACT) {
+              if (['heal', 'mana', 'full_restore_hp', 'buff_damage', 'equip_artifact'].includes(selectedCards[0].effectType || '') || selectedCards[0].type === CardType.HEAL || selectedCards[0].type === CardType.ARTIFACT || selectedCards[0].type === CardType.BLESSING) {
                   setGameState(executeCardEffect(gameState, selectedCards[0], currentPlayer.id));
               } else if (selectedCards[0].type === CardType.RITUAL) {
                   setGameState(executeCardEffect(gameState, selectedCards[0]));
@@ -682,16 +697,22 @@ export const App: React.FC = () => {
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${NATION_CONFIG[humanPlayer.nation].bgColor} ${NATION_CONFIG[humanPlayer.nation].borderColor}`}>
                       <User className="text-white" size={20}/>
                   </div>
-                  <div>
-                      <div className="font-bold text-white text-sm">{humanPlayer.name}</div>
+                  <div className="flex-1 min-w-0">
+                      <div className="font-bold text-white text-sm truncate">{humanPlayer.name}</div>
                       <div className="text-[10px] text-slate-400">{NATION_CONFIG[humanPlayer.nation].name}</div>
                   </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
                   <div className="bg-slate-800 rounded p-1"><div className="text-red-400 font-bold">{humanPlayer.hp}</div><div className="text-[10px] text-slate-500">HP</div></div>
                   <div className="bg-slate-800 rounded p-1"><div className="text-blue-400 font-bold">{humanPlayer.mana}</div><div className="text-[10px] text-slate-500">MP</div></div>
                   <div className="bg-slate-800 rounded p-1"><div className="text-yellow-400 font-bold">{humanPlayer.gold}</div><div className="text-[10px] text-slate-500">G</div></div>
               </div>
+              {/* Active States (Desktop) */}
+              {humanPlayer.activeStates.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 p-2 bg-black/20 rounded border border-white/5">
+                      {humanPlayer.activeStates.map(state => getStatusIcon(state, false))}
+                  </div>
+              )}
           </div>
       </div>
 
@@ -743,14 +764,20 @@ export const App: React.FC = () => {
                                 <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center border border-slate-600">
                                     {opp.isDead ? <Skull size={24}/> : <User size={24}/>}
                                 </div>
-                                <div>
-                                    <div className="font-bold text-white">{opp.name}</div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-white truncate">{opp.name}</div>
                                     <div className="flex gap-2 text-xs">
                                         <span className="text-red-400 flex items-center gap-1"><Heart size={10}/> {opp.hp}</span>
                                         <span className="text-blue-400 flex items-center gap-1"><Zap size={10}/> {opp.mana}</span>
                                     </div>
                                 </div>
                             </div>
+                            {/* Opponent Active States (Desktop) */}
+                            {opp.activeStates.length > 0 && (
+                                <div className="flex gap-1 mb-2 overflow-x-auto scrollbar-hide">
+                                    {opp.activeStates.map(state => getStatusIcon(state, true))}
+                                </div>
+                            )}
                             {/* Desktop Opponent Board Preview */}
                             <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-1">
                                 {opp.lands.map((l, i) => <div key={i} className="w-2 h-2 rounded-full bg-emerald-500" title={l.name}></div>)}
@@ -785,7 +812,13 @@ export const App: React.FC = () => {
                             {/* Info */}
                             <div className="flex-1 min-w-0 flex flex-col justify-center">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-sm font-bold text-white truncate">{opp.name}</span>
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        <span className="text-sm font-bold text-white truncate">{opp.name}</span>
+                                        {/* Mobile Opponent States */}
+                                        <div className="flex gap-0.5">
+                                            {opp.activeStates.map(state => getStatusIcon(state, true))}
+                                        </div>
+                                    </div>
                                     <div className="flex gap-2">
                                          {/* Mini Board Indicators */}
                                         <div className="flex gap-0.5 items-center">
@@ -968,39 +1001,48 @@ export const App: React.FC = () => {
               <div className="relative z-30 bg-slate-900 min-h-[180px] md:min-h-[220px]">
                   {mobileTab === 'hand' || window.innerWidth >= 768 ? (
                       // Hand View
-                      <div className="p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full md:justify-center md:pb-8">
-                         {humanPlayer.isDead ? (
-                             <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
-                         ) : (
-                            humanPlayer.hand.map((card) => {
-                                const isSelected = selectedCardIds.includes(card.id);
-                                const isActionPhase = isHumanTurn;
-                                const isReactionPhase = amIBeingAttacked;
-                                const canInteract = isActionPhase || isReactionPhase;
-                                
-                                let isDisabled = !canInteract;
-                                if (amIBeingAttacked) {
-                                     const incomingType = gameState.pendingAttack?.attackType;
-                                     const isMatch = card.type === incomingType;
-                                     const isRune = card.type === CardType.RUNE;
-                                     if (!isMatch && !isRune) isDisabled = true;
-                                }
-
-                                return (
-                                    <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : 'md:hover:-translate-y-2'}`}>
-                                        <CardComponent 
-                                            card={card} 
-                                            lang={lang} 
-                                            onClick={() => !isDisabled && toggleSelectCard(card)} 
-                                            disabled={isDisabled} 
-                                            compact={window.innerWidth < 768} 
-                                        />
-                                        {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
-                                    </div>
-                                );
-                            })
+                      <div className="relative h-full flex flex-col">
+                         {/* Mobile Player Active States Bar */}
+                         {humanPlayer.activeStates.length > 0 && (
+                             <div className="md:hidden flex gap-2 px-4 py-2 border-b border-white/5 bg-slate-900 overflow-x-auto scrollbar-hide">
+                                 {humanPlayer.activeStates.map(state => getStatusIcon(state, false))}
+                             </div>
                          )}
-                         <div className="w-4 shrink-0"></div>
+
+                         <div className="flex-1 p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full md:justify-center md:pb-8">
+                            {humanPlayer.isDead ? (
+                                <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
+                            ) : (
+                                humanPlayer.hand.map((card) => {
+                                    const isSelected = selectedCardIds.includes(card.id);
+                                    const isActionPhase = isHumanTurn;
+                                    const isReactionPhase = amIBeingAttacked;
+                                    const canInteract = isActionPhase || isReactionPhase;
+                                    
+                                    let isDisabled = !canInteract;
+                                    if (amIBeingAttacked) {
+                                        const incomingType = gameState.pendingAttack?.attackType;
+                                        const isMatch = card.type === incomingType;
+                                        const isRune = card.type === CardType.RUNE;
+                                        if (!isMatch && !isRune) isDisabled = true;
+                                    }
+
+                                    return (
+                                        <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : 'md:hover:-translate-y-2'}`}>
+                                            <CardComponent 
+                                                card={card} 
+                                                lang={lang} 
+                                                onClick={() => !isDisabled && toggleSelectCard(card)} 
+                                                disabled={isDisabled} 
+                                                compact={window.innerWidth < 768} 
+                                            />
+                                            {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
+                                        </div>
+                                    );
+                                })
+                            )}
+                            <div className="w-4 shrink-0"></div>
+                         </div>
                       </div>
                   ) : (
                       // Mobile Board View (Lands & Artifacts)
@@ -1057,6 +1099,15 @@ export const App: React.FC = () => {
                           <div className="font-mono text-yellow-400 font-bold">{inspectedPlayer.gold}</div>
                       </div>
                   </div>
+
+                  {inspectedPlayer.activeStates.length > 0 && (
+                      <div className="mb-6">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Active States</h4>
+                          <div className="flex gap-2 flex-wrap">
+                              {inspectedPlayer.activeStates.map(state => getStatusIcon(state, false))}
+                          </div>
+                      </div>
+                  )}
                   
                   <div className="space-y-4">
                       <div>
@@ -1095,7 +1146,7 @@ export const App: React.FC = () => {
                   <div className="text-sm text-slate-300 space-y-3">
                       <p>1. <b>元素反應</b>: 攻擊會對敵人掛載「印記」。用不同元素攻擊「有印記」的敵人會引爆反應。</p>
                       <p>2. <b>靈魂天平</b>: 打出神聖卡+1，邪惡卡-1。數值越高，同陣營卡牌越強。</p>
-                      <p>3. <b>光之恩惠</b>: 當靈魂達到 <span className="text-yellow-400 font-bold">+3</span> 時，商店首購 <span className="text-white font-bold">50% OFF</span>。</p>
+                      <p>3. <b>祝福與詛咒</b>: 祝福卡能消除所有詛咒並提供增益；詛咒卡能消除所有祝福並施加減益。狀態會在每回合開始時機率觸發。</p>
                   </div>
               </div>
           </div>

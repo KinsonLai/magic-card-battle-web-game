@@ -1,5 +1,5 @@
 
-import { GameState, Player, NationType, Card, CardType, ElementType, AlignmentType, StanceType, MAX_LAND_SIZE, LogEntry, GameSettings, ActionEvent, RoomPlayer, GameEvent, MAX_ARTIFACT_SIZE, Rarity, PLAYS_PER_TURN, ReactionType } from '../types';
+import { GameState, Player, NationType, Card, CardType, ElementType, AlignmentType, StanceType, MAX_LAND_SIZE, LogEntry, GameSettings, ActionEvent, RoomPlayer, GameEvent, MAX_ARTIFACT_SIZE, Rarity, PLAYS_PER_TURN, ReactionType, ActiveState } from '../types';
 import { CARDS, NATION_CONFIG, getRandomCards, ELEMENT_RELATIONSHIPS, getComplexElementName, GAME_EVENTS as EVENTS_LIST, ELEMENT_CONFIG } from '../constants';
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -151,14 +151,14 @@ export const createInitialState = (roomPlayers: RoomPlayer[], settings: GameSett
       botDifficulty: rp.botDifficulty,
       playsUsed: 0,
       hasPurchasedInShop: false,
-      // SOUL SYSTEM
       soul: 0,
       elementMark: null,
       isBleeding: false,
       techShield: 0,
       maxPlays: settings.maxPlaysPerTurn,
       shopDiscount: false,
-      isAdmin: rp.isAdmin
+      isAdmin: rp.isAdmin,
+      activeStates: []
     };
     p.calculatedIncome = calculatePlayerIncome(p, settings.incomeMultiplier);
     return p;
@@ -246,19 +246,51 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
   const triggeredArtifacts: string[] = [];
   
   const processedPlayers = newState.players.map(p => {
+      let activeP = { ...p };
+      
       // Bleeding
-      if (p.id === newState.players[nextIndex].id && p.isBleeding) {
+      if (activeP.id === newState.players[nextIndex].id && activeP.isBleeding) {
           const bleedDamage = 15; 
-          const newHp = Math.max(1, p.hp - bleedDamage);
+          const newHp = Math.max(1, activeP.hp - bleedDamage);
           logs.push({ 
               id: Date.now().toString() + Math.random(), 
-              message: `${p.name} 傷口裂開 (流血)，受到 ${bleedDamage} 點傷害。`, 
+              message: `${activeP.name} 傷口裂開 (流血)，受到 ${bleedDamage} 點傷害。`, 
               type: 'combat', 
               timestamp: Date.now() 
           });
-          return { ...p, hp: newHp, isBleeding: false }; 
+          activeP.hp = newHp;
+          activeP.isBleeding = false; 
       }
-      return p;
+
+      // --- NEW STATE TRIGGER LOGIC (Blessings/Curses) ---
+      if (activeP.id === newState.players[nextIndex].id && activeP.activeStates.length > 0) {
+          activeP.activeStates.forEach(state => {
+              if (Math.random() < state.triggerChance) {
+                  let val = state.effectValue;
+                  if (state.effectType === 'heal') {
+                      activeP.hp = Math.min(activeP.maxHp, activeP.hp + val);
+                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！恢復了 ${val} 生命。`, type: 'info', timestamp: Date.now() });
+                  } else if (state.effectType === 'damage') {
+                      activeP.hp = Math.max(1, activeP.hp - val);
+                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！受到了 ${val} 傷害。`, type: 'combat', timestamp: Date.now() });
+                  } else if (state.effectType === 'gold_gain') {
+                      activeP.gold += val;
+                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！獲得了 ${val} 金錢。`, type: 'economy', timestamp: Date.now() });
+                  } else if (state.effectType === 'gold_loss') {
+                      activeP.gold = Math.max(0, activeP.gold - val);
+                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！遺失了 ${val} 金錢。`, type: 'economy', timestamp: Date.now() });
+                  } else if (state.effectType === 'mana_gain') {
+                      activeP.mana = Math.min(activeP.maxMana, activeP.mana + val);
+                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！恢復了 ${val} 魔力。`, type: 'info', timestamp: Date.now() });
+                  } else if (state.effectType === 'mana_loss') {
+                      activeP.mana = Math.max(0, activeP.mana - val);
+                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！流失了 ${val} 魔力。`, type: 'info', timestamp: Date.now() });
+                  }
+              }
+          });
+      }
+
+      return activeP;
   });
 
   const updatedPlayers = processedPlayers.map((p, idx) => {
@@ -426,7 +458,6 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
             logMsg += `，建造了新的產業。`;
         } else {
             // Should be handled by REPLACE_LAND action, this is a fallback or for AI
-            // If AI or fallback, just discard the oldest one
             const [removed, ...rest] = currentPlayer.lands;
             currentPlayer.lands = [...rest, card];
             logMsg += `，拆除舊產業並建造了新產業。`;
@@ -438,7 +469,6 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
             currentPlayer.artifacts = [...currentPlayer.artifacts, card];
             logMsg += `，裝備了神器。`;
         } else {
-             // Simple logic for full artifacts: replace first
              const [removed, ...rest] = currentPlayer.artifacts;
              currentPlayer.artifacts = [...rest, card];
              logMsg += `，替換了舊神器。`;
@@ -451,44 +481,31 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
         logMsg += `，恢復了 ${val} 點生命。`;
         newPlayers[playerIndex] = currentPlayer;
     }
-    else if (card.type === CardType.BLESSING) {
-        // Handle Blessing Effects
-        // 'heal' and 'full_restore_hp' handled by previous block
-        if (card.effectType === 'mana') currentPlayer.mana = Math.min(currentPlayer.maxMana, currentPlayer.mana + (card.value || 0));
-        else if (card.effectType === 'gold_gain') currentPlayer.gold += (card.value || 0);
-        else if (card.effectType === 'cleanse') { currentPlayer.isBleeding = false; currentPlayer.isStunned = false; logMsg += `，淨化了負面狀態！`; }
-        else if (card.effectType === 'draw_cards') { 
-            const drawn = getWeightedRandomCards(card.value || 2, state.turn, state.settings);
-            currentPlayer.hand = [...currentPlayer.hand, ...drawn].slice(0, state.settings.maxHandSize);
-            logMsg += `，抽取了 ${card.value} 張卡牌。`;
+    else if (card.type === CardType.BLESSING && card.stateData) {
+        // --- NEW LOGIC: BLESSING REPLACES CURSES ---
+        const hasCurses = currentPlayer.activeStates.some(s => s.type === 'CURSE');
+        if (hasCurses) {
+            currentPlayer.activeStates = currentPlayer.activeStates.filter(s => s.type !== 'CURSE');
+            logMsg += `，神聖之力淨化了所有詛咒！`;
+        } else {
+            logMsg += `，獲得了祝福狀態。`;
         }
+        // Add new blessing
+        currentPlayer.activeStates.push(card.stateData);
         newPlayers[playerIndex] = currentPlayer;
     }
-    else if (card.type === CardType.CURSE && targetPlayer) {
-        // Handle Curse Effects on Target
+    else if (card.type === CardType.CURSE && targetPlayer && card.stateData) {
+        // --- NEW LOGIC: CURSE REPLACES BLESSINGS ---
         let tPlayer = { ...targetPlayer };
-        if (card.effectType === 'damage') { tPlayer.hp -= (card.value || 0); logMsg += `，對 ${tPlayer.name} 造成 ${card.value} 點詛咒傷害！`; }
-        else if (card.effectType === 'mana_burn') { tPlayer.mana = Math.max(0, tPlayer.mana - (card.value || 0)); logMsg += `，燒毀了 ${tPlayer.name} 的魔力！`; }
-        else if (card.effectType === 'stun') { tPlayer.isStunned = true; logMsg += `，使 ${tPlayer.name} 暈眩！`; }
-        else if (card.effectType === 'gold_steal') { 
-            const stolen = Math.min(tPlayer.gold, card.value || 0);
-            tPlayer.gold -= stolen;
-            currentPlayer.gold += stolen;
-            logMsg += `，從 ${tPlayer.name} 偷取了 ${stolen} 金錢！`;
+        const hasBlessings = tPlayer.activeStates.some(s => s.type === 'BLESSING');
+        if (hasBlessings) {
+            tPlayer.activeStates = tPlayer.activeStates.filter(s => s.type !== 'BLESSING');
+            logMsg += `，邪惡力量吞噬了 ${tPlayer.name} 的所有祝福！`;
+        } else {
+            logMsg += `，詛咒了 ${tPlayer.name}。`;
         }
-        else if (card.effectType === 'destroy_land') {
-            if (tPlayer.lands.length > 0) {
-                // Determine destruction chance or guarantee
-                if (Math.random() < 0.5 && card.rarity === Rarity.RARE) {
-                     logMsg += `，但破壞產業失敗。`;
-                } else {
-                    const idx = Math.floor(Math.random() * tPlayer.lands.length);
-                    const lostLand = tPlayer.lands[idx];
-                    tPlayer.lands.splice(idx, 1);
-                    logMsg += `，摧毀了 ${tPlayer.name} 的 ${lostLand.name}！`;
-                }
-            }
-        }
+        // Add new curse
+        tPlayer.activeStates.push(card.stateData);
         newPlayers[targetPlayerIndex] = tPlayer;
         newPlayers[playerIndex] = currentPlayer;
     }
@@ -532,6 +549,13 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
         else if (card.effectType === 'gold_gain') {
             currentPlayer.gold += (card.value || 0);
             logMsg += `，獲得了 ${card.value} 金幣。`;
+        }
+        else if (card.effectType === 'gold_steal' && targetPlayer) {
+             const stolen = Math.min(targetPlayer.gold, card.value || 0);
+             targetPlayer.gold -= stolen;
+             currentPlayer.gold += stolen;
+             logMsg += `，從 ${targetPlayer.name} 偷取了 ${stolen} 金錢！`;
+             newPlayers[targetPlayerIndex] = targetPlayer;
         }
         newPlayers[playerIndex] = currentPlayer;
     }
