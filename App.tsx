@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { GameState, Card, CardType, Language, GameSettings, RoomPlayer, MAX_LAND_SIZE, ChatMessage, MAX_ARTIFACT_SIZE, ElementType, PLAYS_PER_TURN, AlignmentType, StanceType } from './types';
-import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, resolveAttack, buyCard, sellCard } from './services/gameEngine';
+import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, resolveAttack, buyCard, sellCard, replaceLand } from './services/gameEngine';
 import { socketService } from './services/socketService';
 import { StartScreen } from './components/StartScreen';
 import { LobbyScreen } from './components/LobbyScreen';
@@ -10,11 +10,12 @@ import { GameGuide } from './components/GameGuide';
 import { Card as CardComponent } from './components/Card';
 import { DebugConsole } from './components/DebugConsole';
 import { SimulationScreen } from './components/SimulationScreen';
+import { AdminPanel } from './components/AdminPanel';
 import { NATION_CONFIG, ELEMENT_CONFIG, ALIGNMENT_CONFIG, getComplexElementName } from './constants';
 import { TRANSLATIONS } from './locales';
 import { getIconComponent } from './utils/iconMap';
 import * as Icons from 'lucide-react';
-import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi, AlertCircle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi, AlertCircle, ChevronUp, ChevronDown, Repeat, Eye, LayoutTemplate } from 'lucide-react';
 
 const App: React.FC = () => {
   const [screen, setScreen] = useState<'start' | 'lobby' | 'gallery' | 'guide' | 'game' | 'simulation'>('start');
@@ -31,10 +32,22 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'log'|'chat'>('log');
   const [chatInput, setChatInput] = useState('');
   
+  // Mobile UI State
+  const [mobileTab, setMobileTab] = useState<'hand' | 'board'>('hand');
+  const [inspectPlayerId, setInspectPlayerId] = useState<string | null>(null);
+
+  // Admin State
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminUser, setAdminUser] = useState('admin');
+  const [adminPass, setAdminPass] = useState('');
+
   // Interaction State
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [shopSelectedCardId, setShopSelectedCardId] = useState<string | null>(null); // For detailed view in shop
   const [targetId, setTargetId] = useState<string | null>(null);
   const [animationData, setAnimationData] = useState<{type: 'attack'|'defense'|'repel'|'normal', value: number, msg: string, sourceName?: string, targetName?: string, cardName?: string, comboName?: string} | null>(null);
+  const [showReplaceModal, setShowReplaceModal] = useState<string | null>(null); // Stores cardId pending replacement
   
   // Notification System
   const [topNotification, setTopNotification] = useState<{message: string, type: 'event'|'artifact'|'info'|'warning'|'error'} | null>(null);
@@ -61,8 +74,16 @@ const App: React.FC = () => {
       const cleanupUpdate = socketService.onStateUpdate((newState) => {
           setGameState({ ...newState, isMultiplayer: true });
           // Reset selections on update to prevent stale data
+          // BUT: Don't clear if we are in the middle of a replace selection or shop viewing? 
+          // Safe to clear basic selection
           setSelectedCardIds([]);
           setTargetId(null);
+          // If action was processed, clear notification quickly if it was a repel/play
+          if (newState.lastAction && newState.lastAction.timestamp > (gameState?.lastAction?.timestamp || 0)) {
+              if (newState.lastAction.type === 'REPEL') {
+                  setTimeout(() => setAnimationData(null), 1500); // Clear animation faster
+              }
+          }
       });
 
       const cleanupLog = socketService.onLog((msg) => {
@@ -75,12 +96,11 @@ const App: React.FC = () => {
           cleanupUpdate();
           cleanupLog();
       }
-  }, []);
+  }, [gameState]);
 
   // --- Helpers ---
   const getPreviewStats = () => {
       if (!gameState || selectedCardIds.length === 0) return null;
-      // In online mode, we assume the local player index is correct OR we find by ID if we stored it
       const socketId = socketService.getId();
       const humanPlayer = gameState.isMultiplayer 
           ? gameState.players.find(p => p.id === socketId) || gameState.players[gameState.currentPlayerIndex]
@@ -104,32 +124,23 @@ const App: React.FC = () => {
 
       const elements: ElementType[] = [];
 
-      // Calculate Basics
       cards.forEach(c => {
           cost += c.manaCost;
           hpCost += (c.hpCost || 0);
           if (c.element && c.element !== ElementType.NEUTRAL) elements.push(c.element);
       });
 
-      // Calculate Damage Preview based on Stack Type
       if (isMagic) {
-          // Magic Stack: Sum of card values
           damage = cards.reduce((sum, c) => sum + (c.value || 0), 0);
       } else if (weapon) {
-          // Physical Stack: Weapon Base + Weapon Bonus (based on Soul) + Rune Values
           damage = (weapon.value || 0);
-          
           if (humanPlayer.soul > 0 && weapon.holyBonus) damage += weapon.holyBonus;
           else if (humanPlayer.soul < 0 && weapon.evilBonus) damage += weapon.evilBonus;
-
           damage += runes.reduce((sum, r) => sum + (r.value || 0), 0);
       }
 
-      if (elements.length > 0) {
-          element = elements[0]; 
-      }
+      if (elements.length > 0) element = elements[0]; 
       
-      // Calculate Potential Reaction if Target Selected
       if ((isMagic || isPhysical) && targetId) {
           const target = gameState.players.find(p => p.id === targetId);
           if (target && target.elementMark && element !== ElementType.NEUTRAL && element !== target.elementMark) {
@@ -144,7 +155,6 @@ const App: React.FC = () => {
           }
       }
       
-      // Apply Multipliers
       if (isMagic || isPhysical) {
           if (gameState.currentEvent?.globalModifier?.damageMultiplier) damage = Math.floor(damage * gameState.currentEvent.globalModifier.damageMultiplier);
           damage = Math.floor(damage * gameState.settings.damageMultiplier);
@@ -152,7 +162,6 @@ const App: React.FC = () => {
       }
 
       const isDefensePhase = gameState.turnPhase === 'DEFENSE';
-
       return { damage, defense: isDefensePhase ? damage : 0, cost, hpCost, element, comboName, reactionBonusText, isAttack: isMagic || isPhysical, isDefensePhase };
   };
 
@@ -163,13 +172,11 @@ const App: React.FC = () => {
   useEffect(() => { if (activeTab === 'chat') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [gameState?.chat, activeTab]);
 
   useEffect(() => {
-      // Sync from game state but prefer local triggers
       if (gameState?.topNotification) {
           setTopNotification(gameState.topNotification);
       }
   }, [gameState?.topNotification]);
 
-  // Auto-dismiss notification
   useEffect(() => {
       if (topNotification) {
           const timer = setTimeout(() => setTopNotification(null), 4000);
@@ -177,10 +184,17 @@ const App: React.FC = () => {
       }
   }, [topNotification]);
 
-  // AI & Game Loop (Only active for Local Games)
   useEffect(() => {
-    if (!gameState || gameState.winnerId || screen !== 'game' || gameState.isDisconnected) return;
-    if (gameState.isMultiplayer) return; // Disable local loop for multiplayer
+      // Auto-hide animation after delay, but respect manual clears
+      if (animationData) {
+          const timer = setTimeout(() => setAnimationData(null), 2500);
+          return () => clearTimeout(timer);
+      }
+  }, [animationData]);
+
+  // AI & Game Loop
+  useEffect(() => {
+    if (!gameState || gameState.winnerId || screen !== 'game' || gameState.isDisconnected || gameState.isMultiplayer) return;
 
     if (gameState.turnPhase === 'ACTION') {
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
@@ -199,15 +213,22 @@ const App: React.FC = () => {
                      const card = playable[Math.floor(Math.random() * playable.length)];
                      const enemies = newState.players.filter(p => p.id !== currentPlayer.id && !p.isDead);
                      let target = enemies[Math.floor(Math.random() * enemies.length)];
-                     if (card.type === CardType.ATTACK || card.type === CardType.MAGIC_ATTACK) {
-                          if (target) newState = executeAttackAction(newState, [card], target.id);
+                     
+                     // Simple AI Logic for replacement: just replace random or don't play if full
+                     if (card.type === CardType.INDUSTRY && currentPlayer.lands.length >= MAX_LAND_SIZE) {
+                         // AI just replaces 0 index for simplicity in local loop
+                         newState = replaceLand(newState, card.id, 0);
                      } else {
-                         if (['heal', 'mana', 'full_restore_hp', 'buff_damage'].includes(card.effectType || '') || card.type === CardType.HEAL || card.type === CardType.ARTIFACT) {
-                             newState = executeCardEffect(newState, card, currentPlayer.id);
-                         } else if (card.type === CardType.RITUAL) {
-                             newState = executeCardEffect(newState, card); // Global
+                         if (card.type === CardType.ATTACK || card.type === CardType.MAGIC_ATTACK) {
+                              if (target) newState = executeAttackAction(newState, [card], target.id);
                          } else {
-                             newState = executeCardEffect(newState, card, target?.id);
+                             if (['heal', 'mana', 'full_restore_hp', 'buff_damage'].includes(card.effectType || '') || card.type === CardType.HEAL || card.type === CardType.ARTIFACT) {
+                                 newState = executeCardEffect(newState, card, currentPlayer.id);
+                             } else if (card.type === CardType.RITUAL) {
+                                 newState = executeCardEffect(newState, card); 
+                             } else {
+                                 newState = executeCardEffect(newState, card, target?.id);
+                             }
                          }
                      }
                 } else {
@@ -231,7 +252,6 @@ const App: React.FC = () => {
         if (targetPlayer && !targetPlayer.isHuman) {
              const delay = 1000;
              const timer = setTimeout(() => {
-                 // AI now only tries to REPEL with matching attack type
                  const incomingType = gameState.pendingAttack!.attackType;
                  const repelCards = targetPlayer.hand.filter(c => c.type === incomingType);
                  
@@ -265,28 +285,48 @@ const App: React.FC = () => {
           }
 
           let type: 'attack'|'defense'|'repel'|'normal' = 'normal';
-          let msg = '';
+          let msg = act.message || '';
           let value = 0;
           let comboName = act.comboName;
 
           if (act.type === CardType.ATTACK || act.type === CardType.MAGIC_ATTACK) {
               type = 'attack';
-              msg = act.cardsPlayed ? act.cardsPlayed.map(c => c.name).join(' + ') : t.attackExcl;
+              if (!msg) msg = act.cardsPlayed ? act.cardsPlayed.map(c => c.name).join(' + ') : t.attackExcl;
               value = act.totalValue || 0;
           } else if (act.type === 'REPEL') {
               type = 'repel';
-              msg = '反擊！';
+              if (!msg) msg = '反擊！';
               value = act.totalValue || 0;
           } else {
-              msg = `${t.cardUsed} ${cardName}`;
+              if (!msg) msg = `${t.cardUsed} ${cardName}`;
           }
           setAnimationData({ type, value, msg, sourceName, targetName, cardName, comboName });
-          const timer = setTimeout(() => setAnimationData(null), 2500);
-          return () => clearTimeout(timer);
       }
   }, [gameState?.lastAction]);
 
   // --- Handlers ---
+  const sha256 = async (str: string) => {
+      const enc = new TextEncoder();
+      const hash = await crypto.subtle.digest('SHA-256', enc.encode(str));
+      return Array.from(new Uint8Array(hash))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+  };
+
+  const handleAdminLoginSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      const hash = await sha256(adminPass);
+      socketService.loginAdmin(adminUser, hash, (success) => {
+          if (success) {
+              setShowAdminLogin(false);
+              setShowAdminPanel(true);
+              setAdminPass('');
+          } else {
+              alert('Login Failed');
+          }
+      });
+  };
+
   const handleStartGame = (players: RoomPlayer[], settings: GameSettings, isOnline: boolean = false) => {
     if (isOnline) {
         // Just wait for socket event
@@ -328,7 +368,6 @@ const App: React.FC = () => {
   const toggleSelectCard = (card: Card) => {
       const isDefensePhase = gameState?.turnPhase === 'DEFENSE';
       
-      // Defense Phase Checks
       if (isDefensePhase) {
           const incomingType = gameState?.pendingAttack?.attackType;
           if (incomingType) {
@@ -344,7 +383,6 @@ const App: React.FC = () => {
       if (selectedCardIds.includes(card.id)) {
           setSelectedCardIds(prev => prev.filter(id => id !== card.id));
       } else {
-          // Stacking Rules Logic ...
           const socketId = socketService.getId();
           const humanPlayer = gameState!.isMultiplayer 
             ? gameState!.players.find(p => p.id === socketId)! 
@@ -354,7 +392,6 @@ const App: React.FC = () => {
           let canSelect = false;
 
           if (currentSelected.length === 0) {
-              // First card
               canSelect = true;
           } else {
               const hasWeapon = currentSelected.some(c => c.type === CardType.ATTACK);
@@ -397,7 +434,7 @@ const App: React.FC = () => {
       }
   };
 
-  const handleExecutePlay = () => {
+  const executePlay = () => {
       if (!gameState || selectedCardIds.length === 0) return;
       const socketId = socketService.getId();
       const humanPlayer = gameState.isMultiplayer
@@ -406,6 +443,12 @@ const App: React.FC = () => {
 
       const selectedCards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
       if (selectedCards.length === 0) return;
+
+      // Special Check: Land Full
+      if (selectedCards[0].type === CardType.INDUSTRY && humanPlayer.lands.length >= MAX_LAND_SIZE) {
+          setShowReplaceModal(selectedCards[0].id);
+          return;
+      }
 
       const types = selectedCards.map(c => c.type);
       const hasAttack = types.includes(CardType.ATTACK);
@@ -456,6 +499,17 @@ const App: React.FC = () => {
       setTargetId(null);
   };
 
+  const handleLandReplace = (slotIndex: number) => {
+      if (!gameState || !showReplaceModal) return;
+      if (gameState.isMultiplayer) {
+          socketService.emitAction({ type: 'REPLACE_LAND', cardId: showReplaceModal, slotIndex });
+      } else {
+          setGameState(replaceLand(gameState, showReplaceModal, slotIndex));
+      }
+      setShowReplaceModal(null);
+      setSelectedCardIds([]);
+  };
+
   const handleSell = () => {
       if (!gameState || selectedCardIds.length !== 1) return;
       
@@ -479,6 +533,7 @@ const App: React.FC = () => {
       } else {
           setGameState(buyCard(gameState, card));
       }
+      setShopSelectedCardId(null);
   };
 
   const handleSkipDefense = () => {
@@ -512,10 +567,27 @@ const App: React.FC = () => {
                 onHost={() => setScreen('lobby')} 
                 onGallery={() => setScreen('gallery')} 
                 onGuide={() => { setPreviousScreen('start'); setScreen('guide'); }} 
-                onSim={() => setScreen('simulation')}
+                onSim={() => {}} 
+                onAdmin={() => setShowAdminLogin(true)}
                 lang={lang} 
                 setLang={setLang} 
             />
+            {showAdminLogin && (
+                <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+                    <form onSubmit={handleAdminLoginSubmit} className="bg-slate-900 border border-indigo-500 rounded-xl p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl shadow-indigo-900/50">
+                        <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Terminal size={20}/> ADMIN ACCESS</h2>
+                        <input value={adminUser} onChange={e=>setAdminUser(e.target.value)} placeholder="Username" className="bg-black/50 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"/>
+                        <input value={adminPass} onChange={e=>setAdminPass(e.target.value)} type="password" placeholder="Password" className="bg-black/50 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"/>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setShowAdminLogin(false)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded hover:bg-slate-700">CANCEL</button>
+                            <button type="submit" className="flex-1 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-500 font-bold">LOGIN</button>
+                        </div>
+                    </form>
+                </div>
+            )}
+            {showAdminPanel && (
+                <AdminPanel onClose={() => setShowAdminPanel(false)} onSimulation={() => setScreen('simulation')} />
+            )}
         </div>
       );
   }
@@ -554,8 +626,12 @@ const App: React.FC = () => {
   // @ts-ignore
   const EventIcon = gameState.currentEvent ? getIconComponent(gameState.currentEvent.icon) : Icons.Zap;
 
-  // New: Get detail for Inspector (Last selected or just first)
-  const activeCard = selectedCards.length > 0 ? selectedCards[selectedCards.length - 1] : null;
+  // Active Card for Inspector
+  const activeCard = selectedCardIds.length > 0 ? selectedCards[selectedCards.length - 1] : null;
+  const shopActiveCard = gameState.shopCards.find(c => c.id === shopSelectedCardId);
+
+  // Inspector Player
+  const inspectedPlayer = inspectPlayerId ? gameState.players.find(p => p.id === inspectPlayerId) : null;
 
   return (
     <div className="h-[100dvh] w-screen bg-slate-950 font-sans text-slate-200 selection:bg-indigo-500/30 overflow-hidden flex flex-col relative">
@@ -563,7 +639,7 @@ const App: React.FC = () => {
       {/* Debug Console Overlay */}
       {showDebug && <DebugConsole gameState={gameState} setGameState={setGameState} onClose={() => setShowDebug(false)} />}
 
-      {/* 1. TOP BAR (Cleaned up) */}
+      {/* 1. TOP BAR */}
       <div className="h-16 bg-gradient-to-b from-slate-900 to-slate-900/0 px-4 flex items-center justify-between z-30 shrink-0">
           <div className="flex items-center gap-3">
               <button onClick={() => setShowQuitModal(true)} className="p-2 bg-slate-800/50 rounded-full text-slate-400 hover:text-white border border-white/5"><Power size={16}/></button>
@@ -638,6 +714,11 @@ const App: React.FC = () => {
                         </div>
 
                         {targetId === opp.id && <div className="absolute -top-2 bg-red-600 text-white rounded-full p-1 shadow-lg animate-bounce z-20"><Crosshair size={12}/></div>}
+                        
+                        {/* Inspect Button */}
+                        <button onClick={(e) => {e.stopPropagation(); setInspectPlayerId(opp.id);}} className="absolute bottom-5 right-0 bg-slate-800 rounded-full p-1 border border-slate-600 hover:text-white text-slate-400 hover:bg-slate-700 z-30">
+                            <Eye size={12}/>
+                        </button>
                     </div>
                 ))}
             </div>
@@ -649,11 +730,12 @@ const App: React.FC = () => {
                          <div className="text-4xl">{animationData.type === 'attack' ? '⚔️' : '🛡️'}</div>
                          <div className="text-2xl font-black text-white drop-shadow-md">{animationData.cardName}</div>
                          {animationData.value > 0 && <div className="text-3xl font-mono text-yellow-300 font-bold">{animationData.value}</div>}
+                         <div className="text-sm opacity-80 bg-black/30 px-2 rounded">{animationData.msg}</div>
                      </div>
                 </div>
             )}
             
-            {/* Context Messages (Turn/Defense) */}
+            {/* Context Messages */}
             <div className="mt-auto px-6 pb-4 flex justify-center pointer-events-none z-10">
                 {isHumanTurn && !amIBeingAttacked && !selectedCardIds.length && (
                     <div className="bg-emerald-900/80 text-emerald-100 px-4 py-2 rounded-full text-xs font-bold shadow-lg border border-emerald-500/30 animate-pulse">
@@ -727,7 +809,7 @@ const App: React.FC = () => {
                           )}
 
                           <button 
-                              onClick={handleExecutePlay}
+                              onClick={executePlay}
                               disabled={!isHumanTurn && !amIBeingAttacked}
                               className={`flex-1 py-3 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2
                                   ${isHumanTurn || amIBeingAttacked ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}
@@ -741,9 +823,9 @@ const App: React.FC = () => {
               )}
           </div>
 
-          {/* Stats Bar (Compact) */}
+          {/* Stats Bar (Compact) + Mobile Tab Switcher */}
           <div className="px-4 py-2 flex items-center justify-between border-b border-slate-800 bg-slate-950 relative z-30">
-              <div className="flex gap-4">
+              <div className="flex gap-3">
                   <div className="flex flex-col">
                       <span className="text-[10px] font-bold text-slate-500 uppercase">HP</span>
                       <div className="text-sm font-bold text-white flex items-center gap-1">
@@ -764,54 +846,144 @@ const App: React.FC = () => {
                   </div>
               </div>
               
-              {/* Soul Indicator */}
-              <div className="flex flex-col items-end">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">Soul</span>
-                  <div className={`text-xs font-bold font-mono ${humanPlayer.soul > 0 ? 'text-yellow-400' : humanPlayer.soul < 0 ? 'text-purple-400' : 'text-slate-400'}`}>
-                      {humanPlayer.soul > 0 ? '+' : ''}{humanPlayer.soul}
+              <div className="flex items-center gap-3">
+                  {/* Soul Indicator */}
+                  <div className="flex flex-col items-end">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Soul</span>
+                      <div className={`text-xs font-bold font-mono ${humanPlayer.soul > 0 ? 'text-yellow-400' : humanPlayer.soul < 0 ? 'text-purple-400' : 'text-slate-400'}`}>
+                          {humanPlayer.soul > 0 ? '+' : ''}{humanPlayer.soul}
+                      </div>
+                  </div>
+                  
+                  {/* Tab Switcher */}
+                  <div className="flex bg-slate-800 rounded-lg p-0.5 ml-2">
+                      <button onClick={()=>setMobileTab('hand')} className={`p-1.5 rounded-md transition-colors ${mobileTab === 'hand' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><List size={16}/></button>
+                      <button onClick={()=>setMobileTab('board')} className={`p-1.5 rounded-md transition-colors ${mobileTab === 'board' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}><LayoutTemplate size={16}/></button>
                   </div>
               </div>
           </div>
 
-          {/* Hand Area (Compact Scroll) */}
-          <div className="relative z-30 bg-slate-900">
-              <div className="p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide min-h-[160px]">
-                 {humanPlayer.isDead ? (
-                     <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
-                 ) : (
-                    humanPlayer.hand.map((card) => {
-                        const isSelected = selectedCardIds.includes(card.id);
-                        const isActionPhase = isHumanTurn;
-                        const isReactionPhase = amIBeingAttacked;
-                        const canInteract = isActionPhase || isReactionPhase;
-                        
-                        let isDisabled = !canInteract;
-                        if (amIBeingAttacked) {
-                             const incomingType = gameState.pendingAttack?.attackType;
-                             const isMatch = card.type === incomingType;
-                             const isRune = card.type === CardType.RUNE;
-                             if (!isMatch && !isRune) isDisabled = true;
-                        }
+          {/* Bottom Content Area */}
+          <div className="relative z-30 bg-slate-900 min-h-[160px]">
+              {mobileTab === 'hand' ? (
+                  // Hand View
+                  <div className="p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full">
+                     {humanPlayer.isDead ? (
+                         <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
+                     ) : (
+                        humanPlayer.hand.map((card) => {
+                            const isSelected = selectedCardIds.includes(card.id);
+                            const isActionPhase = isHumanTurn;
+                            const isReactionPhase = amIBeingAttacked;
+                            const canInteract = isActionPhase || isReactionPhase;
+                            
+                            let isDisabled = !canInteract;
+                            if (amIBeingAttacked) {
+                                 const incomingType = gameState.pendingAttack?.attackType;
+                                 const isMatch = card.type === incomingType;
+                                 const isRune = card.type === CardType.RUNE;
+                                 if (!isMatch && !isRune) isDisabled = true;
+                            }
 
-                        return (
-                            <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : ''}`}>
-                                <CardComponent 
-                                    card={card} 
-                                    lang={lang} 
-                                    onClick={() => !isDisabled && toggleSelectCard(card)} 
-                                    disabled={isDisabled} 
-                                    compact={true} 
-                                />
-                                {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
-                            </div>
-                        );
-                    })
-                 )}
-                 {/* Padding for end of scroll */}
-                 <div className="w-4 shrink-0"></div>
-              </div>
+                            return (
+                                <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : ''}`}>
+                                    <CardComponent 
+                                        card={card} 
+                                        lang={lang} 
+                                        onClick={() => !isDisabled && toggleSelectCard(card)} 
+                                        disabled={isDisabled} 
+                                        compact={true} 
+                                    />
+                                    {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
+                                </div>
+                            );
+                        })
+                     )}
+                     <div className="w-4 shrink-0"></div>
+                  </div>
+              ) : (
+                  // Board View (Lands & Artifacts)
+                  <div className="p-4 grid grid-cols-1 gap-4 h-full overflow-y-auto">
+                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                          <h4 className="text-xs font-bold text-emerald-400 uppercase mb-2 flex items-center gap-2"><Factory size={12}/> Lands ({humanPlayer.lands.length}/{MAX_LAND_SIZE})</h4>
+                          <div className="flex gap-2 flex-wrap">
+                              {humanPlayer.lands.length > 0 ? humanPlayer.lands.map((land, i) => (
+                                  <div key={i} className="bg-emerald-900/20 border border-emerald-500/30 p-2 rounded text-xs text-emerald-100 flex-1 min-w-[100px]">
+                                      <div className="font-bold">{land.name}</div>
+                                      <div className="text-[10px] opacity-70">+{land.value} Gold/Turn</div>
+                                  </div>
+                              )) : <div className="text-xs text-slate-600 italic">No Lands</div>}
+                          </div>
+                      </div>
+                      
+                      <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800">
+                          <h4 className="text-xs font-bold text-amber-400 uppercase mb-2 flex items-center gap-2"><Anchor size={12}/> Artifacts ({humanPlayer.artifacts.length}/{MAX_ARTIFACT_SIZE})</h4>
+                          <div className="flex gap-2 flex-wrap">
+                              {humanPlayer.artifacts.length > 0 ? humanPlayer.artifacts.map((art, i) => (
+                                  <div key={i} className="bg-amber-900/20 border border-amber-500/30 p-2 rounded text-xs text-amber-100 flex-1 min-w-[100px]">
+                                      <div className="font-bold">{art.name}</div>
+                                      <div className="text-[10px] opacity-70">Effect Active</div>
+                                  </div>
+                              )) : <div className="text-xs text-slate-600 italic">No Artifacts</div>}
+                          </div>
+                      </div>
+                  </div>
+              )}
           </div>
       </div>
+
+      {/* --- MODALS --- */}
+
+      {/* Enemy Inspection Modal */}
+      {inspectedPlayer && (
+          <div className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setInspectPlayerId(null)}>
+              <div className="bg-slate-900 border border-slate-700 p-6 rounded-3xl w-full max-w-md shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => setInspectPlayerId(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full"><X size={20}/></button>
+                  <h2 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+                      <User className="text-indigo-400"/> {inspectedPlayer.name} 的狀態
+                  </h2>
+                  <div className="grid grid-cols-3 gap-2 mb-6 text-center">
+                      <div className="bg-slate-800 p-2 rounded-lg">
+                          <div className="text-[10px] text-slate-500 uppercase">HP</div>
+                          <div className="font-mono text-red-400 font-bold">{inspectedPlayer.hp}</div>
+                      </div>
+                      <div className="bg-slate-800 p-2 rounded-lg">
+                          <div className="text-[10px] text-slate-500 uppercase">Mana</div>
+                          <div className="font-mono text-blue-400 font-bold">{inspectedPlayer.mana}</div>
+                      </div>
+                      <div className="bg-slate-800 p-2 rounded-lg">
+                          <div className="text-[10px] text-slate-500 uppercase">Gold</div>
+                          <div className="font-mono text-yellow-400 font-bold">{inspectedPlayer.gold}</div>
+                      </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                      <div>
+                          <h4 className="text-xs font-bold text-emerald-400 uppercase mb-2">Lands ({inspectedPlayer.lands.length})</h4>
+                          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+                              {inspectedPlayer.lands.map((l, i) => (
+                                  <div key={i} className="bg-emerald-900/20 border border-emerald-500/30 px-3 py-2 rounded text-xs text-emerald-100 whitespace-nowrap">
+                                      {l.name}
+                                  </div>
+                              ))}
+                              {inspectedPlayer.lands.length === 0 && <span className="text-xs text-slate-600">無產業</span>}
+                          </div>
+                      </div>
+                      <div>
+                          <h4 className="text-xs font-bold text-amber-400 uppercase mb-2">Artifacts ({inspectedPlayer.artifacts.length})</h4>
+                          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+                              {inspectedPlayer.artifacts.map((a, i) => (
+                                  <div key={i} className="bg-amber-900/20 border border-amber-500/30 px-3 py-2 rounded text-xs text-amber-100 whitespace-nowrap">
+                                      {a.name}
+                                  </div>
+                              ))}
+                              {inspectedPlayer.artifacts.length === 0 && <span className="text-xs text-slate-600">無神器</span>}
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Guide Modal */}
       {showGuideModal && (
@@ -844,6 +1016,25 @@ const App: React.FC = () => {
           </div>
       )}
 
+      {/* Land Replace Modal */}
+      {showReplaceModal && (
+          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-slate-900 border border-slate-700 p-6 rounded-3xl w-full max-w-md shadow-2xl relative text-center">
+                  <h2 className="text-xl font-bold text-white mb-4">產業欄位已滿！</h2>
+                  <p className="text-sm text-slate-400 mb-6">請選擇一個現有產業進行替換 (舊產業將被拆除)：</p>
+                  <div className="grid grid-cols-1 gap-3">
+                      {humanPlayer.lands.map((land, i) => (
+                          <button key={i} onClick={() => handleLandReplace(i)} className="bg-emerald-900/20 hover:bg-emerald-900/40 border border-emerald-500/30 p-3 rounded-xl text-left flex justify-between items-center transition-all group">
+                              <span className="font-bold text-emerald-100">{land.name}</span>
+                              <span className="text-xs bg-black/30 px-2 py-1 rounded text-emerald-400 group-hover:bg-red-900/50 group-hover:text-red-300">替換</span>
+                          </button>
+                      ))}
+                  </div>
+                  <button onClick={() => setShowReplaceModal(null)} className="mt-6 text-slate-500 text-sm hover:text-white underline">取消建造</button>
+              </div>
+          </div>
+      )}
+
       {/* Shop Modal */}
       {showShop && (
           <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-end md:items-center justify-center md:p-4 animate-fade-in" onClick={() => setShowShop(false)}>
@@ -856,36 +1047,62 @@ const App: React.FC = () => {
                       <button onClick={() => setShowShop(false)} className="p-2 bg-slate-800 rounded-full text-slate-400"><X size={20}/></button>
                   </div>
                   
-                  <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-950/50 pb-20">
+                  <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-950/50 pb-20 relative">
                       {gameState.shopCards.map((card) => {
                           const isPurchased = card.purchasedByPlayerIds?.includes(humanPlayer.id);
                           let cost = card.cost;
-                          let originalCost = card.cost;
                           let hasDiscount = false;
                           
                           if (humanPlayer.shopDiscount && !humanPlayer.hasPurchasedInShop) {
                               cost = Math.floor(cost * 0.5);
                               hasDiscount = true;
                           }
-                          const canAfford = humanPlayer.gold >= cost;
                           
                           return (
                               <div key={card.id} className="flex flex-col gap-2 relative">
-                                  <div onClick={() => !isPurchased && handleBuy(card)} className={`relative transition-all ${isPurchased ? 'opacity-30 grayscale' : 'active:scale-95'}`}>
+                                  <div onClick={() => !isPurchased && setShopSelectedCardId(card.id)} className={`relative transition-all ${isPurchased ? 'opacity-30 grayscale' : 'active:scale-95 cursor-pointer'}`}>
                                       <CardComponent card={card} lang={lang} compact={true} showCost={false} />
                                       {!isPurchased && hasDiscount && <div className="absolute -top-2 -right-2 z-20 bg-red-600 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg">-50%</div>}
                                   </div>
-                                  <button 
-                                    onClick={() => handleBuy(card)}
-                                    disabled={isPurchased || !canAfford || !isHumanTurn}
-                                    className={`w-full py-2 rounded-lg font-bold text-xs ${isPurchased ? 'bg-slate-800 text-slate-500' : canAfford ? 'bg-yellow-600 text-white' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}
-                                  >
-                                      {isPurchased ? '已擁有' : canAfford ? `${cost}G` : `${cost}G`}
-                                  </button>
                               </div>
                           )
                       })}
                   </div>
+
+                  {/* Shop Details Overlay */}
+                  {shopActiveCard && (
+                      <div className="absolute inset-0 bg-slate-900/95 backdrop-blur z-20 flex flex-col items-center justify-center p-6 animate-fade-in">
+                          <button onClick={() => setShopSelectedCardId(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 bg-slate-800 rounded-full"><X size={20}/></button>
+                          <div className="scale-125 mb-6">
+                              <CardComponent card={shopActiveCard} lang={lang} />
+                          </div>
+                          <div className="text-center space-y-2 mb-6 max-w-sm">
+                              <h3 className="text-xl font-bold text-white">{shopActiveCard.name}</h3>
+                              <p className="text-slate-400 text-sm bg-black/30 p-3 rounded-lg border border-white/10">{shopActiveCard.description}</p>
+                          </div>
+                          
+                          {(() => {
+                              const isPurchased = shopActiveCard.purchasedByPlayerIds?.includes(humanPlayer.id);
+                              let cost = shopActiveCard.cost;
+                              let hasDiscount = false;
+                              if (humanPlayer.shopDiscount && !humanPlayer.hasPurchasedInShop) {
+                                  cost = Math.floor(cost * 0.5);
+                                  hasDiscount = true;
+                              }
+                              const canAfford = humanPlayer.gold >= cost;
+
+                              return (
+                                  <button 
+                                    onClick={() => handleBuy(shopActiveCard)}
+                                    disabled={isPurchased || !canAfford || !isHumanTurn}
+                                    className={`w-full max-w-xs py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 ${isPurchased ? 'bg-slate-800 text-slate-500' : canAfford ? 'bg-yellow-600 text-white shadow-xl shadow-yellow-900/20 hover:scale-105 transition-transform' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}
+                                  >
+                                      {isPurchased ? '已擁有' : canAfford ? (hasDiscount ? <span className="flex gap-2"><s>{shopActiveCard.cost}G</s> {cost}G</span> : `購買 ${cost}G`) : `資金不足 (${cost}G)`}
+                                  </button>
+                              );
+                          })()}
+                      </div>
+                  )}
               </div>
           </div>
       )}

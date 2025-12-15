@@ -180,6 +180,10 @@ class SocketService {
 
   // --- Admin Events ---
 
+  public loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
+      this.socket?.emit('admin_login', { user, passHash }, callback);
+  }
+
   public onAdminRoomList(callback: (rooms: any[]) => void) {
       return this.on('admin_room_list', callback);
   }
