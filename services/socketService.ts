@@ -177,6 +177,20 @@ class SocketService {
   public onLog(callback: (msg: string) => void) {
       return this.on('server_log', (msg: string) => callback(msg));
   }
+
+  // --- Admin Events ---
+
+  public onAdminRoomList(callback: (rooms: any[]) => void) {
+      return this.on('admin_room_list', callback);
+  }
+
+  public adminDeleteRoom(roomId: string) {
+      this.socket?.emit('admin_delete_room', roomId);
+  }
+
+  public adminJoinRoom(roomId: string, callback: (res: any) => void) {
+      this.socket?.emit('admin_join_room', roomId, callback);
+  }
 }
 
 export const socketService = new SocketService();

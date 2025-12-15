@@ -15,7 +15,10 @@ export enum CardType {
   CONTRACT = 'CONTRACT',
   RUNE = 'RUNE', 
   RITUAL = 'RITUAL', 
-  ARTIFACT = 'ARTIFACT'
+  ARTIFACT = 'ARTIFACT',
+  MISSILE = 'MISSILE',
+  SHIELD = 'SHIELD',
+  MAGIC_DEFENSE = 'MAGIC_DEFENSE'
 }
 
 export enum ElementType {
@@ -44,30 +47,26 @@ export enum Rarity {
   LEGENDARY = 'LEGENDARY'
 }
 
-export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact';
+export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact' | 'block_missile';
 
 export interface Card {
   id: string;
   name: string; 
   type: CardType;
   element: ElementType;
-  alignment?: AlignmentType; // For Runes/Rituals/Magic
+  alignment?: AlignmentType; 
   rarity: Rarity;
   effectType?: EffectType;
   cost: number;
   hpCost?: number; 
   manaCost: number;
   description: string;
-  value?: number; // Base Value
-  
-  // Dual Alignment Bonuses for Physical Weapons
+  value?: number; 
   holyBonus?: number;
   evilBonus?: number;
-
   runeLevel?: number; 
   isDisposable?: boolean;
   eventPayload?: string; 
-  // Shop tracking
   purchasedByPlayerIds?: string[];
 }
 
@@ -91,6 +90,7 @@ export interface Player {
   id: string;
   name: string;
   isHuman: boolean;
+  isAdmin?: boolean; // Admin flag
   nation: NationType;
   hp: number;
   maxHp: number;
@@ -107,15 +107,12 @@ export interface Player {
   isStunned: boolean;
   isBleeding?: boolean;
   techShield?: number;
-  
-  // New Soul System
-  soul: number; // -3 to 3
-  elementMark: ElementType | null; // Current element primed on player
-  maxPlaysModifier?: number; // For Mire effect
-
+  soul: number; 
+  elementMark: ElementType | null; 
+  maxPlaysModifier?: number; 
   maxPlays: number; 
   shopDiscount?: boolean; 
-  botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts'; // Added 'mcts'
+  botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts'; 
   playsUsed: number;
   hasPurchasedInShop: boolean;
   currentStance?: StanceType;
@@ -128,6 +125,7 @@ export interface RoomPlayer {
   isHost: boolean;
   isBot: boolean;
   isReady: boolean; 
+  isAdmin?: boolean;
   botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts';
 }
 
@@ -170,12 +168,13 @@ export interface ActionEvent {
   targetId: string | null;
   cardId: string; 
   cardsPlayed?: Card[]; 
-  type: CardType | 'REPEL'; 
+  type: CardType | 'REPEL' | 'REPLACE'; 
   totalValue?: number;
   timestamp: number;
   elementalModifier?: number;
   comboName?: string;
   reflectedDamage?: number; 
+  message?: string; // Enhanced message
 }
 
 export type ReactionType = 'SPREAD' | 'MIRE' | 'ANNIHILATION' | 'OVERLOAD' | 'PRIME';
@@ -188,10 +187,8 @@ export interface PendingAttack {
   element: ElementType;
   alignment?: AlignmentType; 
   attackType: CardType;
-  
-  // New Reaction Logic
   reaction?: ReactionType;
-  reactionEffectValue?: number; // e.g., self damage amount or heal amount
+  reactionEffectValue?: number; 
 }
 
 export interface GameState {
@@ -224,37 +221,39 @@ export interface LogEntry {
   message: string;
   type: 'info' | 'combat' | 'event' | 'economy' | 'tutorial';
   timestamp: number;
+  data?: any; // For admin inspection
 }
 
 export interface ChatMessage {
   id: string;
   sender: string;
   text: string;
+  isAdmin?: boolean;
   isSystem?: boolean;
 }
 
-// Data Record for ML Training
 export interface BattleRecord {
     turn: number;
-    player: string; // Nation
-    stateVector: number[]; // Simplified numeric representation of state
-    policyTarget: number[]; // Probability distribution over actions (from MCTS)
-    valueTarget: number; // Final game result (-1 or 1)
+    player: string; 
+    stateVector: number[]; 
+    policyTarget: number[]; 
+    valueTarget: number; 
     actionTaken: string;
 }
 
-// Socket Action Types
 export type ClientAction = 
   | { type: 'PLAY_CARD', cardId: string, targetId?: string }
+  | { type: 'REPLACE_LAND', cardId: string, slotIndex: number } // New Action
   | { type: 'ATTACK', cardIds: string[], targetId: string }
   | { type: 'REPEL', cardIds: string[] }
   | { type: 'TAKE_DAMAGE' }
   | { type: 'BUY_CARD', cardId: string }
   | { type: 'SELL_CARD', cardId: string }
   | { type: 'END_TURN' }
-  | { type: 'SEND_CHAT', message: string };
+  | { type: 'SEND_CHAT', message: string }
+  | { type: 'ADMIN_COMMAND', command: string, payload?: any };
 
-export const MAX_LAND_SIZE = 5;
+export const MAX_LAND_SIZE = 3; // Changed from 5 to 3
 export const MAX_ARTIFACT_SIZE = 3;
 export const PLAYS_PER_TURN = 3;
 

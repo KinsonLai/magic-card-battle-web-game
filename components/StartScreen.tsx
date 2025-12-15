@@ -1,8 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../locales';
-import { Swords, Image, Sparkles, HelpCircle, Brain, Code } from 'lucide-react';
+import { Swords, Image, Sparkles, HelpCircle, Brain, Code, User } from 'lucide-react';
 
 interface StartScreenProps {
   onHost: () => void;
@@ -11,10 +11,25 @@ interface StartScreenProps {
   setLang: (l: Language) => void;
   onGuide: () => void;
   onSim: () => void;
+  onAdmin: () => void; // New prop
 }
 
-export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lang, onGuide, onSim }) => {
+export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lang, onGuide, onSim, onAdmin }) => {
   const t = TRANSLATIONS['zh-TW']; 
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+      // Load name from cookie
+      const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
+      if (savedName) setName(savedName);
+  }, []);
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newVal = e.target.value;
+      setName(newVal);
+      // Save to cookie (1 year expiry)
+      document.cookie = `player_name=${newVal}; path=/; max-age=31536000`;
+  };
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-950 to-black flex flex-col items-center justify-center p-6 text-white relative overflow-hidden font-sans">
@@ -26,7 +41,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
           <div className="absolute bottom-[-10%] left-[20%] w-[600px] h-[600px] bg-blue-600/20 rounded-full mix-blend-screen filter blur-[100px] animate-blob animation-delay-4000"></div>
       </div>
 
-      <div className="max-w-md w-full space-y-12 text-center relative z-10 flex flex-col items-center">
+      <div className="max-w-md w-full space-y-10 text-center relative z-10 flex flex-col items-center">
         
         {/* Title Section */}
         <div className="space-y-4 animate-fade-in-up">
@@ -38,6 +53,17 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
             {t.title}
           </h1>
           <p className="text-slate-400 text-sm md:text-base font-light tracking-wide max-w-xs mx-auto leading-relaxed">{t.subtitle}</p>
+        </div>
+
+        {/* Name Input */}
+        <div className="w-full relative group">
+            <User className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" size={20}/>
+            <input 
+                value={name} 
+                onChange={handleNameChange}
+                placeholder="請輸入你的名字..." 
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-12 pr-4 text-center text-white placeholder:text-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+            />
         </div>
 
         {/* Main Actions */}
@@ -72,10 +98,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
             </div>
 
             <button 
-                onClick={onSim}
-                className="w-full py-3 rounded-xl bg-slate-900/50 border border-slate-800 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50 transition-all text-xs font-mono tracking-widest flex items-center justify-center gap-2"
+                onClick={onAdmin} // Changed from onSim to onAdmin trigger logic (Admin login)
+                className="w-full py-3 rounded-xl bg-slate-900/50 border border-slate-800 text-slate-600 hover:text-red-400 hover:border-red-500/30 transition-all text-[10px] font-mono tracking-widest flex items-center justify-center gap-2"
             >
-                <Brain size={14}/> AI_SIMULATION
+                <Code size={12}/> ADMIN_PANEL
             </button>
         </div>
       </div>
@@ -86,7 +112,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
               <Code size={12}/>
               <span>Created by <span className="text-slate-400 font-bold">KinsonLai</span></span>
           </div>
-          <div className="text-[10px] font-mono opacity-40">v2.0.0 | Mobile Enhanced</div>
+          <div className="text-[10px] font-mono opacity-40">v2.1.0 | Mobile Enhanced</div>
       </div>
     </div>
   );

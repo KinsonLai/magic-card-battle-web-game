@@ -5,8 +5,9 @@ import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import { RoomPlayer, GameState, GameSettings, ClientAction, RoomInfo, NationType } from '../types';
-import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, buyCard, sellCard, resolveAttack } from '../services/gameEngine';
+import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, buyCard, sellCard, resolveAttack, replaceLand } from '../services/gameEngine';
 
 // ESM dirname workaround
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +23,9 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 });
+
+// Admin Credentials (Simple hash for demo: SHA-256 of 'admin')
+const ADMIN_HASH = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918'; 
 
 interface RoomData {
     id: string;
@@ -40,9 +44,77 @@ const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath) as any);
 
 io.on('connection', (socket: Socket) => {
-    console.log(`User connected: ${socket.id}`);
+    // console.log(`User connected: ${socket.id}`);
 
     let currentRoomId: string | null = null;
+    let isAdmin = false;
+
+    // --- Admin: Login ---
+    socket.on('admin_login', (data: { user: string, passHash: string }, callback: (success: boolean) => void) => {
+        if (data.user === 'admin' && data.passHash === ADMIN_HASH) {
+            isAdmin = true;
+            socket.join('admin_channel');
+            if (callback) callback(true);
+            
+            // Send full room data to admin
+            const allRooms = Object.values(rooms).map(r => ({
+                id: r.id,
+                name: r.name,
+                playerCount: r.players.length,
+                maxPlayers: r.settings.maxPlayers,
+                isPublic: r.isPublic,
+                hasPassword: !!r.password,
+                hostName: r.players.find(p => p.isHost)?.name || 'Unknown',
+                status: r.state ? 'PLAYING' : 'WAITING',
+                settings: r.settings
+            }));
+            socket.emit('admin_room_list', allRooms);
+        } else {
+            if (callback) callback(false);
+        }
+    });
+
+    // --- Admin: Delete Room ---
+    socket.on('admin_delete_room', (roomId: string) => {
+        if (!isAdmin) return;
+        if (rooms[roomId]) {
+            io.to(roomId).emit('kicked'); // Kick everyone
+            io.to(roomId).emit('server_log', '管理員強制關閉了房間。');
+            io.in(roomId).socketsLeave(roomId);
+            delete rooms[roomId];
+            io.emit('rooms_changed');
+            // Update admin list
+            const allRooms = Object.values(rooms); // Map again...
+            io.to('admin_channel').emit('admin_room_list', allRooms); 
+        }
+    });
+
+    // --- Admin: Join Any Room ---
+    socket.on('admin_join_room', (roomId: string, callback: (res: any) => void) => {
+        if (!isAdmin) return;
+        const room = rooms[roomId];
+        if (!room) { if(callback) callback({success: false}); return; }
+
+        const adminPlayer: RoomPlayer = {
+            id: socket.id,
+            name: '⚡ADMIN⚡',
+            nation: NationType.MAGIC,
+            isHost: false,
+            isBot: false,
+            isReady: true,
+            isAdmin: true,
+            botDifficulty: 'normal'
+        };
+        
+        // Force join even if full (Admin privilege)
+        room.players.push(adminPlayer);
+        socket.join(roomId);
+        currentRoomId = roomId;
+        
+        if (callback) callback({ success: true });
+        io.to(roomId).emit('room_update', { players: room.players, hostId: room.players.find(p=>p.isHost)?.id || '' });
+        io.to(roomId).emit('server_log', '⚡系統管理員已進入房間⚡');
+    });
 
     // --- Lobby: Get Room List ---
     socket.on('get_rooms', (callback: (rooms: RoomInfo[]) => void) => {
@@ -76,8 +148,9 @@ io.on('connection', (socket: Socket) => {
             nation: data.player.nation as any || 'FIGHTER',
             isHost: true,
             isBot: false,
-            isReady: true, // Host is always ready
-            botDifficulty: 'normal'
+            isReady: true, 
+            botDifficulty: 'normal',
+            isAdmin: isAdmin // Admin creating room
         };
 
         rooms[roomId] = {
@@ -107,7 +180,6 @@ io.on('connection', (socket: Socket) => {
 
         socket.join(roomId);
         currentRoomId = roomId;
-        console.log(`Room created: ${roomId} by ${hostPlayer.name}`);
         
         if (typeof callback === 'function') callback({ roomId });
         io.to(roomId).emit('room_update', { players: rooms[roomId].players, hostId: socket.id });
@@ -129,17 +201,17 @@ io.on('connection', (socket: Socket) => {
             return;
         }
 
-        if (room.players.length >= room.settings.maxPlayers) {
+        if (room.players.length >= room.settings.maxPlayers && !isAdmin) {
             if (typeof callback === 'function') callback({ success: false, message: '房間已滿' });
             return;
         }
 
-        if (room.state) {
+        if (room.state && !isAdmin) {
             if (typeof callback === 'function') callback({ success: false, message: '遊戲已經開始' });
             return;
         }
 
-        if (room.password && room.password !== password) {
+        if (room.password && room.password !== password && !isAdmin) {
             if (typeof callback === 'function') callback({ success: false, message: '密碼錯誤', needsPassword: true });
             return;
         }
@@ -155,8 +227,9 @@ io.on('connection', (socket: Socket) => {
             nation: player.nation as any || 'FIGHTER',
             isHost: false,
             isBot: false,
-            isReady: false, // Guests must explicitly ready up
-            botDifficulty: 'normal'
+            isReady: false, 
+            botDifficulty: 'normal',
+            isAdmin: isAdmin
         };
 
         room.players.push(newPlayer);
@@ -179,14 +252,13 @@ io.on('connection', (socket: Socket) => {
         
         if (player) {
             player.isReady = !player.isReady;
-            // Notify room
             const currentHost = room.players.find(p => p.isHost);
             io.to(currentRoomId).emit('room_update', { players: room.players, hostId: currentHost?.id || room.players[0].id });
         }
     });
 
     // --- Lobby: Add Bot ---
-    socket.on('add_bot', () => {
+    socket.on('add_bot', (slotIndex?: number) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
@@ -204,11 +276,13 @@ io.on('connection', (socket: Socket) => {
             nation: randomNation,
             isHost: false,
             isBot: true,
-            isReady: true, // Bots are always ready
+            isReady: true, 
             botDifficulty: 'normal'
         };
 
+        // Insert at specific index if possible (basic array handling, ideally map slots)
         room.players.push(botPlayer);
+        
         io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
         io.to(currentRoomId).emit('server_log', `房主加入了 AI: ${botPlayer.name}`);
         io.emit('rooms_changed');
@@ -219,7 +293,7 @@ io.on('connection', (socket: Socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
-        if (!player || !player.isHost) return;
+        if (!player || (!player.isHost && !player.isAdmin)) return; // Admin can kick
         if (targetId === player.id) return;
 
         const targetIndex = room.players.findIndex(p => p.id === targetId);
@@ -245,10 +319,24 @@ io.on('connection', (socket: Socket) => {
         if (!currentRoomId || !rooms[currentRoomId]) return;
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
-        if (!player || !player.isHost) return;
+        if (!player || (!player.isHost && !player.isAdmin)) return;
 
         room.settings = { ...room.settings, ...settings };
         io.to(currentRoomId).emit('settings_update', room.settings);
+    });
+
+    // --- Lobby: Update Player Nation (Fix AI Bug) ---
+    socket.on('update_player_nation', (targetId: string, nation: NationType) => {
+        if (!currentRoomId || !rooms[currentRoomId]) return;
+        const room = rooms[currentRoomId];
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || !player.isHost) return;
+
+        const target = room.players.find(p => p.id === targetId);
+        if (target) {
+            target.nation = nation;
+            io.to(currentRoomId).emit('room_update', { players: room.players, hostId: player.id });
+        }
     });
 
     // --- Game: Start ---
@@ -260,15 +348,13 @@ io.on('connection', (socket: Socket) => {
         const room = rooms[currentRoomId];
         const player = room.players.find(p => p.id === socket.id);
         
-        if (!player || !player.isHost) {
+        if (!player || (!player.isHost && !player.isAdmin)) {
             if (typeof callback === 'function') callback({ success: false, message: '權限不足' });
             return;
         }
 
-        // Force Host Ready (fixes edge case where host toggled ready off)
         player.isReady = true;
 
-        // Check if all players are ready
         const unreadyPlayers = room.players.filter(p => !p.isReady);
         if (unreadyPlayers.length > 0) {
             const names = unreadyPlayers.map(p => p.name).join(', ');
@@ -302,8 +388,17 @@ io.on('connection', (socket: Socket) => {
 
         if (!gameState) return;
 
+        // Admin Debug Command
+        if (action.type === 'ADMIN_COMMAND' && isAdmin) {
+            // Apply cheat to current state
+            // Simplified: Re-using debug console logic would require importing it or duplicating logic
+            // For now, basic logs
+            io.to(currentRoomId).emit('server_log', `[ADMIN] Executed ${action.command}`);
+            return;
+        }
+
         const currentPlayer = gameState.players[gameState.currentPlayerIndex];
-        const isTurnAction = ['PLAY_CARD', 'ATTACK', 'BUY_CARD', 'SELL_CARD', 'END_TURN'].includes(action.type);
+        const isTurnAction = ['PLAY_CARD', 'ATTACK', 'BUY_CARD', 'SELL_CARD', 'END_TURN', 'REPLACE_LAND'].includes(action.type);
         
         let isAllowed = false;
         if (currentPlayer.id === socket.id && isTurnAction) isAllowed = true;
@@ -313,6 +408,7 @@ io.on('connection', (socket: Socket) => {
              }
         }
         if (action.type === 'SEND_CHAT') isAllowed = true;
+        if (isAdmin) isAllowed = true; // Admin override
 
         if (!isAllowed) return;
 
@@ -323,6 +419,10 @@ io.on('connection', (socket: Socket) => {
                     if (card) {
                         gameState = executeCardEffect(gameState, card, action.targetId || currentPlayer.id);
                     }
+                    break;
+                }
+                case 'REPLACE_LAND': {
+                    gameState = replaceLand(gameState, action.cardId, action.slotIndex);
                     break;
                 }
                 case 'ATTACK': {
@@ -372,7 +472,8 @@ io.on('connection', (socket: Socket) => {
                         gameState.chat.push({
                             id: Date.now().toString(),
                             sender: sender.name,
-                            text: action.message
+                            text: action.message,
+                            isAdmin: sender.isAdmin
                         });
                     }
                     break;
@@ -392,7 +493,7 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`User disconnected: ${socket.id}`);
+        // console.log(`User disconnected: ${socket.id}`);
         if (currentRoomId && rooms[currentRoomId]) {
             const room = rooms[currentRoomId];
             const wasHost = room.players.find(p => p.id === socket.id)?.isHost;
@@ -403,7 +504,7 @@ io.on('connection', (socket: Socket) => {
                 const realPlayer = room.players.find(p => !p.isBot);
                 if (realPlayer) {
                     realPlayer.isHost = true;
-                    realPlayer.isReady = true; // New host automatically ready
+                    realPlayer.isReady = true; 
                     io.to(currentRoomId).emit('server_log', `${realPlayer.name} 現在是房主。`);
                     io.to(currentRoomId).emit('room_update', { players: room.players, hostId: realPlayer.id });
                 } else {
