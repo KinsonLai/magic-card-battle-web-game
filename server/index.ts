@@ -1,13 +1,22 @@
-
 import express from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { RoomPlayer, GameState, GameSettings, ClientAction, RoomInfo, NationType } from '../types';
 import { createInitialState, nextTurn, executeCardEffect, executeAttackAction, buyCard, sellCard, resolveAttack } from '../services/gameEngine';
 
+// ESM path helpers
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 app.use(cors());
+
+// Serve static files from the React app build directory
+// Cast to any to resolve RequestHandler type mismatch between express and serve-static-core
+app.use('/', express.static(path.join(__dirname, '../dist')) as any);
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -397,6 +406,11 @@ io.on('connection', (socket: Socket) => {
             broadcastRoomList();
         }
     });
+});
+
+// Handle React Routing, return all requests to React app
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 const PORT = process.env.PORT || 3000;

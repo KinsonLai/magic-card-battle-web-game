@@ -4,12 +4,17 @@ import { ClientAction, GameSettings, GameState, RoomInfo, RoomPlayer, ChatMessag
 
 class SocketService {
   private socket: Socket | null = null;
-  private url: string = 'http://localhost:3000'; 
+  // Use window.location.origin in production (PROD), otherwise localhost
+  // We safely check if import.meta.env exists to avoid "Cannot read properties of undefined (reading 'PROD')"
+  private url: string = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD) 
+    ? window.location.origin 
+    : 'http://localhost:3000';
 
-  public connect(url: string): Promise<void> {
-    this.url = url;
+  public connect(url?: string): Promise<void> {
+    if (url) this.url = url;
+    
     return new Promise((resolve, reject) => {
-      this.socket = io(url, {
+      this.socket = io(this.url, {
         reconnectionAttempts: 5,
         timeout: 10000,
         autoConnect: true

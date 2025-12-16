@@ -16,8 +16,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onJoinRoom, onBack, la
   const t = TRANSLATIONS['zh-TW'];
   
   // Connection State
+  // Default URL logic: if in prod, use current origin, else localhost
+  const [serverUrl, setServerUrl] = useState(() => {
+      // Safely check for env to prevent crash
+      const isProd = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD;
+      return isProd ? window.location.origin : 'http://localhost:3000';
+  });
+  
   const [isConnected, setIsConnected] = useState(false);
-  const [serverUrl, setServerUrl] = useState('http://localhost:3000');
   const [isConnecting, setIsConnecting] = useState(false);
 
   // User Profile
