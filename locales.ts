@@ -91,9 +91,7 @@ const zhTW = {
       [CardType.CONTRACT]: "契約",
       [CardType.RUNE]: "符文",
       [CardType.RITUAL]: "儀式",
-      [CardType.ARTIFACT]: "聖物",
-      [CardType.BLESSING]: "祝福",
-      [CardType.CURSE]: "詛咒"
+      [CardType.ARTIFACT]: "聖物"
     }
 };
 

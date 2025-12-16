@@ -2,7 +2,7 @@
 import React from 'react';
 import { Language } from '../types';
 import { TRANSLATIONS } from '../locales';
-import { Swords, Image, Sparkles, HelpCircle, Brain, Lock } from 'lucide-react';
+import { Swords, Image, Sparkles, HelpCircle } from 'lucide-react';
 
 interface StartScreenProps {
   onHost: () => void;
@@ -10,11 +10,9 @@ interface StartScreenProps {
   lang: Language;
   setLang: (l: Language) => void;
   onGuide: () => void;
-  onSim: () => void;
-  onAdmin: () => void;
 }
 
-export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lang, onGuide, onSim, onAdmin }) => {
+export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lang, onGuide }) => {
   const t = TRANSLATIONS['zh-TW']; 
 
   return (
@@ -47,7 +45,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
                 <div className="absolute inset-0 bg-white/20 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="flex items-center gap-4 text-2xl font-bold text-white">
                     <Swords size={32} className="group-hover:rotate-12 transition-transform"/>
-                    {t.host}
+                    {t.start}
                 </div>
             </button>
 
@@ -67,13 +65,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
            <button onClick={onGuide} className="p-3 bg-indigo-900 rounded-full text-white hover:bg-indigo-800 shadow-lg font-bold flex items-center gap-2 px-6"><HelpCircle size={20}/> 指南</button>
       </div>
 
-      <div className="absolute bottom-4 text-slate-600 text-xs font-mono w-full flex flex-col justify-center items-center gap-2">
-          <div className="flex items-center gap-4">
-              <span>v1.4.0 | AI Update</span>
-              <button onClick={onAdmin} className="opacity-30 hover:opacity-100 transition-opacity p-1"><Lock size={12}/></button>
-          </div>
-          <div className="opacity-50">Created by KinsonLai</div>
-      </div>
+      <div className="absolute bottom-4 text-slate-600 text-xs font-mono">v3.1.0 | Room System Update</div>
     </div>
   );
 };

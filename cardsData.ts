@@ -1,16 +1,16 @@
 
 export const cardsData = [
-  // --- INDUSTRY (Buffed Income) ---
-  { "id": "small_shop", "name": "市場攤位", "type": "INDUSTRY", "rarity": "COMMON", "cost": 30, "manaCost": 0, "value": 25, "effectType": "income", "description": "每回合獲得 25 金錢", "element": "NEUTRAL" },
-  { "id": "farm", "name": "小麥農場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 50, "manaCost": 0, "value": 40, "effectType": "income", "description": "穩定的食物供應，每回合 +40 金錢", "element": "NEUTRAL" },
-  { "id": "logging_camp", "name": "伐木場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 40, "manaCost": 0, "value": 35, "effectType": "income", "description": "開採木材資源，每回合 +35 金錢", "element": "NEUTRAL" },
-  { "id": "fishery", "name": "近海漁場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 45, "manaCost": 0, "value": 38, "effectType": "income", "description": "捕撈海產，每回合 +38 金錢", "element": "NEUTRAL" },
-  { "id": "workshop", "name": "工坊", "type": "INDUSTRY", "rarity": "RARE", "cost": 80, "manaCost": 0, "value": 60, "effectType": "income", "description": "生產工具，每回合 +60 金錢", "element": "NEUTRAL" },
-  { "id": "foundry", "name": "鋼鐵鑄造廠", "type": "INDUSTRY", "rarity": "RARE", "cost": 90, "manaCost": 0, "value": 70, "effectType": "income", "description": "冶煉鋼鐵，每回合 +70 金錢", "element": "NEUTRAL" },
-  { "id": "mine", "name": "金礦", "type": "INDUSTRY", "rarity": "EPIC", "cost": 150, "manaCost": 0, "value": 100, "effectType": "income", "description": "挖掘黃金，每回合 +100 金錢", "element": "NEUTRAL" },
-  { "id": "mint", "name": "皇家造幣廠", "type": "INDUSTRY", "rarity": "EPIC", "cost": 200, "manaCost": 0, "value": 140, "effectType": "income", "description": "發行貨幣，每回合 +140 金錢", "element": "NEUTRAL" },
-  { "id": "bank", "name": "銀行總部", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 300, "manaCost": 0, "value": 200, "effectType": "income", "description": "金融中心，每回合 +200 金錢", "element": "NEUTRAL" },
-  { "id": "stock_exchange", "name": "證券交易所", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 400, "manaCost": 0, "value": 300, "effectType": "income", "description": "掌控全球經濟命脈，每回合 +300 金錢", "element": "NEUTRAL" },
+  // --- INDUSTRY (Neutral, No Alignment) ---
+  { "id": "small_shop", "name": "市場攤位", "type": "INDUSTRY", "rarity": "COMMON", "cost": 30, "manaCost": 0, "value": 5, "effectType": "income", "description": "每回合獲得少量收入", "element": "NEUTRAL" },
+  { "id": "farm", "name": "小麥農場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 50, "manaCost": 0, "value": 8, "effectType": "income", "description": "穩定的食物供應，增加收入", "element": "NEUTRAL" },
+  { "id": "logging_camp", "name": "伐木場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 40, "manaCost": 0, "value": 6, "effectType": "income", "description": "開採木材資源，增加基礎收入", "element": "NEUTRAL" },
+  { "id": "fishery", "name": "近海漁場", "type": "INDUSTRY", "rarity": "COMMON", "cost": 45, "manaCost": 0, "value": 7, "effectType": "income", "description": "捕撈海產，增加收入", "element": "NEUTRAL" },
+  { "id": "workshop", "name": "工坊", "type": "INDUSTRY", "rarity": "RARE", "cost": 80, "manaCost": 0, "value": 12, "effectType": "income", "description": "生產工具，增加收入", "element": "NEUTRAL" },
+  { "id": "foundry", "name": "鋼鐵鑄造廠", "type": "INDUSTRY", "rarity": "RARE", "cost": 90, "manaCost": 0, "value": 14, "effectType": "income", "description": "冶煉鋼鐵，顯著增加收入", "element": "NEUTRAL" },
+  { "id": "mine", "name": "金礦", "type": "INDUSTRY", "rarity": "EPIC", "cost": 120, "manaCost": 0, "value": 18, "effectType": "income", "description": "挖掘黃金，大幅增加收入", "element": "NEUTRAL" },
+  { "id": "mint", "name": "皇家造幣廠", "type": "INDUSTRY", "rarity": "EPIC", "cost": 180, "manaCost": 0, "value": 28, "effectType": "income", "description": "發行貨幣，巨額收入來源", "element": "NEUTRAL" },
+  { "id": "bank", "name": "銀行總部", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 250, "manaCost": 0, "value": 35, "effectType": "income", "description": "金融中心，巨額收入", "element": "NEUTRAL" },
+  { "id": "stock_exchange", "name": "證券交易所", "type": "INDUSTRY", "rarity": "LEGENDARY", "cost": 300, "manaCost": 0, "value": 45, "effectType": "income", "description": "掌控全球經濟命脈，極致收入", "element": "NEUTRAL" },
   
   // --- SUPPORT ---
   { "id": "minor_heal", "name": "輕微治療", "type": "HEAL", "rarity": "COMMON", "cost": 20, "manaCost": 15, "value": 20, "effectType": "heal", "description": "恢復少量生命值", "element": "WATER", "alignment": "HOLY" },
@@ -26,43 +26,8 @@ export const cardsData = [
   { "id": "investment", "name": "鮮血契約: 投資", "type": "CONTRACT", "rarity": "RARE", "cost": 0, "manaCost": 0, "value": 100, "hpCost": 25, "effectType": "gold_gain", "description": "犧牲 25HP 獲得一筆投資回報", "element": "EARTH", "alignment": "EVIL" },
   { "id": "dark_ritual", "name": "黑暗儀式", "type": "CONTRACT", "rarity": "EPIC", "cost": 0, "manaCost": 0, "value": 200, "hpCost": 50, "effectType": "gold_gain", "description": "犧牲 50HP 獲得巨額財富", "element": "FIRE", "alignment": "EVIL" },
   
-  // --- BLESSINGS (Buffs) ---
-  { 
-    "id": "bless_heal", "name": "天使守護", "type": "BLESSING", "rarity": "COMMON", "cost": 40, "manaCost": 20, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 30% 機率恢復 15 HP。", "element": "NEUTRAL", "alignment": "HOLY",
-    "stateData": { "id": "st_angel", "name": "天使守護", "type": "BLESSING", "description": "每回合 30% 機率恢復 15 HP", "icon": "Heart", "triggerChance": 0.3, "effectType": "heal", "effectValue": 15 }
-  },
-  { 
-    "id": "bless_gold", "name": "商神眷顧", "type": "BLESSING", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 40% 機率獲得 25 金錢。", "element": "EARTH", "alignment": "HOLY",
-    "stateData": { "id": "st_merchant", "name": "商神眷顧", "type": "BLESSING", "description": "每回合 40% 機率獲得 25 金錢", "icon": "Coins", "triggerChance": 0.4, "effectType": "gold_gain", "effectValue": 25 }
-  },
-  { 
-    "id": "bless_mana", "name": "魔力源泉", "type": "BLESSING", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 50% 機率恢復 10 魔力。", "element": "WATER", "alignment": "HOLY",
-    "stateData": { "id": "st_manasource", "name": "魔力源泉", "type": "BLESSING", "description": "每回合 50% 機率恢復 10 魔力", "icon": "Zap", "triggerChance": 0.5, "effectType": "mana_gain", "effectValue": 10 }
-  },
-  { 
-    "id": "bless_divine", "name": "神聖光輝", "type": "BLESSING", "rarity": "LEGENDARY", "cost": 200, "manaCost": 80, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 100% 機率恢復 20 HP。", "element": "NEUTRAL", "alignment": "HOLY",
-    "stateData": { "id": "st_divine", "name": "神聖光輝", "type": "BLESSING", "description": "每回合 100% 機率恢復 20 HP", "icon": "Sun", "triggerChance": 1.0, "effectType": "heal", "effectValue": 20 }
-  },
-
-  // --- CURSES (Debuffs) ---
-  { 
-    "id": "curse_pain", "name": "痛苦纏身", "type": "CURSE", "rarity": "COMMON", "cost": 40, "manaCost": 20, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 30% 機率受到 15 傷害。", "element": "NEUTRAL", "alignment": "EVIL",
-    "stateData": { "id": "st_pain", "name": "痛苦纏身", "type": "CURSE", "description": "每回合 30% 機率受到 15 傷害", "icon": "Skull", "triggerChance": 0.3, "effectType": "damage", "effectValue": 15 }
-  },
-  { 
-    "id": "curse_leak", "name": "魔力洩漏", "type": "CURSE", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 40% 機率流失 15 魔力。", "element": "FIRE", "alignment": "EVIL",
-    "stateData": { "id": "st_leak", "name": "魔力洩漏", "type": "CURSE", "description": "每回合 40% 機率流失 15 魔力", "icon": "ZapOff", "triggerChance": 0.4, "effectType": "mana_loss", "effectValue": 15 }
-  },
-  { 
-    "id": "curse_poverty", "name": "窮神附體", "type": "CURSE", "rarity": "RARE", "cost": 60, "manaCost": 30, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 40% 機率遺失 30 金錢。", "element": "AIR", "alignment": "EVIL",
-    "stateData": { "id": "st_poverty", "name": "窮神附體", "type": "CURSE", "description": "每回合 40% 機率遺失 30 金錢", "icon": "TrendingDown", "triggerChance": 0.4, "effectType": "gold_loss", "effectValue": 30 }
-  },
-  { 
-    "id": "curse_doom", "name": "死神印記", "type": "CURSE", "rarity": "LEGENDARY", "cost": 200, "manaCost": 80, "value": 0, "effectType": "apply_state", "description": "狀態：每回合 50% 機率受到 40 真實傷害。", "element": "NEUTRAL", "alignment": "EVIL",
-    "stateData": { "id": "st_doom", "name": "死神印記", "type": "CURSE", "description": "每回合 50% 機率受到 40 傷害", "icon": "Ghost", "triggerChance": 0.5, "effectType": "damage", "effectValue": 40 }
-  },
-
-  // --- PHYSICAL ATTACKS (Existing - No Changes to IDs to keep save compat) ---
+  // --- PHYSICAL ATTACKS (DUAL EFFECTS, NEUTRAL) ---
+  // Common
   { "id": "wpn_iron_sword", "name": "鐵製長劍", "type": "ATTACK", "rarity": "COMMON", "cost": 20, "manaCost": 0, "value": 10, "holyBonus": 5, "evilBonus": 5, "effectType": "damage", "description": "基礎 10 / [光] +5 / [暗] +5", "element": "NEUTRAL" },
   { "id": "wpn_oak_staff", "name": "橡木棍", "type": "ATTACK", "rarity": "COMMON", "cost": 15, "manaCost": 0, "value": 8, "holyBonus": 6, "evilBonus": 2, "effectType": "damage", "description": "基礎 8 / [光] +6 / [暗] +2", "element": "NEUTRAL" },
   { "id": "wpn_rusty_dagger", "name": "生鏽匕首", "type": "ATTACK", "rarity": "COMMON", "cost": 15, "manaCost": 0, "value": 8, "holyBonus": 2, "evilBonus": 6, "effectType": "damage", "description": "基礎 8 / [光] +2 / [暗] +6", "element": "NEUTRAL" },
@@ -94,7 +59,7 @@ export const cardsData = [
   { "id": "wpn_dawn_guard", "name": "黎明守護者", "type": "ATTACK", "rarity": "EPIC", "cost": 170, "manaCost": 20, "value": 42, "holyBonus": 38, "evilBonus": 2, "effectType": "damage", "description": "基礎 42 / [光] +38 / [暗] +2", "element": "NEUTRAL" },
   { "id": "wpn_abyss_touch", "name": "深淵之觸", "type": "ATTACK", "rarity": "EPIC", "cost": 170, "manaCost": 20, "value": 42, "holyBonus": 2, "evilBonus": 38, "effectType": "damage", "description": "基礎 42 / [光] +2 / [暗] +38", "element": "NEUTRAL" },
 
-  // Legendary
+  // Legendary (Mana Cap Applied 80->80, 100->100)
   { "id": "wpn_excalibur", "name": "王者之劍", "type": "ATTACK", "rarity": "LEGENDARY", "cost": 350, "manaCost": 80, "value": 70, "holyBonus": 80, "evilBonus": 20, "effectType": "damage", "description": "基礎 70 / [光] +80 / [暗] +20", "element": "NEUTRAL" },
   { "id": "wpn_godslayer", "name": "弒神者", "type": "ATTACK", "rarity": "LEGENDARY", "cost": 350, "manaCost": 80, "value": 70, "holyBonus": 20, "evilBonus": 80, "effectType": "damage", "description": "基礎 70 / [光] +20 / [暗] +80", "element": "NEUTRAL" },
   { "id": "wpn_trinity", "name": "三位一體", "type": "ATTACK", "rarity": "LEGENDARY", "cost": 320, "manaCost": 60, "value": 80, "holyBonus": 40, "evilBonus": 40, "effectType": "damage", "description": "基礎 80 / [光] +40 / [暗] +40", "element": "NEUTRAL" },
@@ -105,45 +70,45 @@ export const cardsData = [
   { "id": "mana_crystal", "name": "魔力水晶", "type": "ARTIFACT", "rarity": "RARE", "cost": 200, "manaCost": 0, "value": 10, "effectType": "equip_artifact", "description": "每回合額外 +10 魔力", "element": "WATER", "alignment": "HOLY" },
   { "id": "warriors_flag", "name": "戰士旗幟", "type": "ARTIFACT", "rarity": "RARE", "cost": 300, "manaCost": 0, "value": 15, "effectType": "equip_artifact", "description": "攻擊力 +15", "element": "FIRE", "alignment": "HOLY" },
   { "id": "lucky_charm", "name": "幸運護符", "type": "ARTIFACT", "rarity": "COMMON", "cost": 100, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "抵擋一次神器破壞 (消耗品)", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "vampire_fang", "name": "吸血鬼之牙", "type": "ARTIFACT", "rarity": "EPIC", "cost": 250, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "造成傷害時恢復 10% 生命", "element": "FIRE", "alignment": "EVIL" },
+  { "id": "vampire_fang", "name": "吸血鬼之牙", "type": "ARTIFACT", "rarity": "EPIC", "cost": 250, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "造成傷害時恢復 10% 生命 (未實裝)", "element": "FIRE", "alignment": "EVIL" },
   { "id": "midas_hand", "name": "點石成金手", "type": "ARTIFACT", "rarity": "LEGENDARY", "cost": 400, "manaCost": 0, "value": 30, "effectType": "equip_artifact", "description": "每回合額外 +30 金錢", "element": "NEUTRAL", "alignment": "EVIL" },
   { "id": "philosopher_stone", "name": "賢者之石", "type": "ARTIFACT", "rarity": "LEGENDARY", "cost": 500, "manaCost": 0, "value": 25, "effectType": "equip_artifact", "description": "每回合額外 +25 魔力", "element": "WATER", "alignment": "HOLY" },
-  { "id": "hermes_boots", "name": "赫爾墨斯之靴", "type": "ARTIFACT", "rarity": "EPIC", "cost": 200, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "回合抽牌數 +1", "element": "AIR", "alignment": "HOLY" },
-  { "id": "phoenix_feather", "name": "鳳凰羽毛", "type": "ARTIFACT", "rarity": "LEGENDARY", "cost": 350, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "抵擋一次致命傷害", "element": "FIRE", "alignment": "HOLY" },
-  { "id": "dragon_scale", "name": "龍之鱗片", "type": "ARTIFACT", "rarity": "EPIC", "cost": 300, "manaCost": 0, "value": 20, "effectType": "equip_artifact", "description": "防禦力 +20 (自動抵銷傷害)", "element": "EARTH", "alignment": "HOLY" },
-  { "id": "thief_glove", "name": "盜賊手套", "type": "ARTIFACT", "rarity": "RARE", "cost": 200, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "每回合偷取對手 5 金錢", "element": "AIR", "alignment": "EVIL" },
+  { "id": "hermes_boots", "name": "赫爾墨斯之靴", "type": "ARTIFACT", "rarity": "EPIC", "cost": 200, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "回合抽牌數 +1 (需實裝)", "element": "AIR", "alignment": "HOLY" },
+  { "id": "phoenix_feather", "name": "鳳凰羽毛", "type": "ARTIFACT", "rarity": "LEGENDARY", "cost": 350, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "抵擋一次致命傷害 (需實裝)", "element": "FIRE", "alignment": "HOLY" },
+  { "id": "dragon_scale", "name": "龍之鱗片", "type": "ARTIFACT", "rarity": "EPIC", "cost": 300, "manaCost": 0, "value": 20, "effectType": "equip_artifact", "description": "防禦力 +20 (需實裝)", "element": "EARTH", "alignment": "HOLY" },
+  { "id": "thief_glove", "name": "盜賊手套", "type": "ARTIFACT", "rarity": "RARE", "cost": 200, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "每回合偷取對手 5 金錢 (需實裝)", "element": "AIR", "alignment": "EVIL" },
   { "id": "royal_crown", "name": "王權皇冠", "type": "ARTIFACT", "rarity": "LEGENDARY", "cost": 600, "manaCost": 0, "value": 50, "effectType": "equip_artifact", "description": "收入增加 50%", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "book_of_truth", "name": "真理之書", "type": "ARTIFACT", "rarity": "EPIC", "cost": 450, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "所有魔法消耗 -10", "element": "NEUTRAL", "alignment": "HOLY" },
-  { "id": "cursed_idol", "name": "詛咒雕像", "type": "ARTIFACT", "rarity": "RARE", "cost": 150, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "每回合對所有敵人造成 5 點傷害", "element": "EARTH", "alignment": "EVIL" },
+  { "id": "book_of_truth", "name": "真理之書", "type": "ARTIFACT", "rarity": "EPIC", "cost": 450, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "所有魔法消耗 -10 (需實裝)", "element": "NEUTRAL", "alignment": "HOLY" },
+  { "id": "cursed_idol", "name": "詛咒雕像", "type": "ARTIFACT", "rarity": "RARE", "cost": 150, "manaCost": 0, "value": 0, "effectType": "equip_artifact", "description": "每回合對所有敵人造成 5 點傷害 (需實裝)", "element": "EARTH", "alignment": "EVIL" },
   
-  // --- RITUALS (Buffed: No HP Cost, Reduced Mana Cost) ---
-  { "id": "ritual_doom", "name": "末日儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「魔力異常」災難", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_mana_void" },
-  { "id": "ritual_plague", "name": "瘟疫儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「大規模天災」", "element": "WATER", "alignment": "EVIL", "eventPayload": "evt_plague" },
-  { "id": "ritual_inflation", "name": "通膨詛咒", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「供應鏈破裂」", "element": "AIR", "alignment": "EVIL", "eventPayload": "evt_inflation" },
-  { "id": "ritual_desert", "name": "荒漠化", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「沙漠化」災難", "element": "EARTH", "alignment": "EVIL", "eventPayload": "evt_desert" },
-  { "id": "ritual_taxes", "name": "暴政契約", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「苛政重稅」", "element": "NEUTRAL", "alignment": "EVIL", "eventPayload": "evt_taxes" },
-  { "id": "ritual_earthquake", "name": "地裂儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 70, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「大地震」", "element": "EARTH", "alignment": "EVIL", "eventPayload": "evt_earthquake" },
-  { "id": "ritual_silence", "name": "禁魔結界", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「禁魔領域」", "element": "AIR", "alignment": "EVIL", "eventPayload": "evt_silence" },
-  { "id": "ritual_rust", "name": "腐蝕詛咒", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「裝備鏽蝕」", "element": "WATER", "alignment": "EVIL", "eventPayload": "evt_rust" },
-  { "id": "ritual_drought", "name": "枯萎儀式", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「乾旱」", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_drought" },
-  { "id": "ritual_meteor", "name": "隕石召喚", "type": "RITUAL", "rarity": "LEGENDARY", "cost": 300, "manaCost": 80, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「火山爆發」災難", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_volcano" },
-  { "id": "ritual_curse", "name": "衰弱詛咒", "type": "RITUAL", "rarity": "RARE", "cost": 200, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「虛弱詛咒」災難", "element": "WATER", "alignment": "EVIL", "eventPayload": "evt_curse" },
-  { "id": "ritual_war", "name": "全面戰爭", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「戰爭」封鎖商店", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_war" },
-  { "id": "ritual_chaos", "name": "混沌降臨", "type": "RITUAL", "rarity": "LEGENDARY", "cost": 400, "manaCost": 80, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【暗黑限定】召喚「市場崩盤」災難", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_market_crash" },
+  // --- RITUALS (Added Missing Events) ---
+  { "id": "ritual_doom", "name": "末日儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 50, "effectType": "trigger_event", "description": "【暗黑限定】召喚「魔力異常」災難", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_mana_void" },
+  { "id": "ritual_plague", "name": "瘟疫儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 50, "effectType": "trigger_event", "description": "【暗黑限定】召喚「大規模天災」", "element": "WATER", "alignment": "EVIL", "eventPayload": "evt_plague" },
+  { "id": "ritual_inflation", "name": "通膨詛咒", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 80, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【暗黑限定】召喚「供應鏈破裂」", "element": "AIR", "alignment": "EVIL", "eventPayload": "evt_inflation" },
+  { "id": "ritual_desert", "name": "荒漠化", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 80, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【暗黑限定】召喚「沙漠化」災難", "element": "EARTH", "alignment": "EVIL", "eventPayload": "evt_desert" },
+  { "id": "ritual_taxes", "name": "暴政契約", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 40, "effectType": "trigger_event", "description": "【暗黑限定】召喚「苛政重稅」", "element": "NEUTRAL", "alignment": "EVIL", "eventPayload": "evt_taxes" },
+  { "id": "ritual_earthquake", "name": "地裂儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 100, "value": 0, "hpCost": 50, "effectType": "trigger_event", "description": "【暗黑限定】召喚「大地震」", "element": "EARTH", "alignment": "EVIL", "eventPayload": "evt_earthquake" },
+  { "id": "ritual_silence", "name": "禁魔結界", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 40, "effectType": "trigger_event", "description": "【暗黑限定】召喚「禁魔領域」", "element": "AIR", "alignment": "EVIL", "eventPayload": "evt_silence" },
+  { "id": "ritual_rust", "name": "腐蝕詛咒", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 80, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【暗黑限定】召喚「裝備鏽蝕」", "element": "WATER", "alignment": "EVIL", "eventPayload": "evt_rust" },
+  { "id": "ritual_drought", "name": "枯萎儀式", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 80, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【暗黑限定】召喚「乾旱」", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_drought" },
+  { "id": "ritual_meteor", "name": "隕石召喚", "type": "RITUAL", "rarity": "LEGENDARY", "cost": 300, "manaCost": 100, "value": 0, "hpCost": 50, "effectType": "trigger_event", "description": "【暗黑限定】召喚「火山爆發」災難", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_volcano" },
+  { "id": "ritual_curse", "name": "衰弱詛咒", "type": "RITUAL", "rarity": "RARE", "cost": 200, "manaCost": 80, "value": 0, "hpCost": 40, "effectType": "trigger_event", "description": "【暗黑限定】召喚「虛弱詛咒」災難", "element": "WATER", "alignment": "EVIL", "eventPayload": "evt_curse" },
+  { "id": "ritual_war", "name": "全面戰爭", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 100, "value": 0, "hpCost": 40, "effectType": "trigger_event", "description": "【暗黑限定】召喚「戰爭」封鎖商店", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_war" },
+  { "id": "ritual_chaos", "name": "混沌降臨", "type": "RITUAL", "rarity": "LEGENDARY", "cost": 400, "manaCost": 100, "value": 0, "hpCost": 50, "effectType": "trigger_event", "description": "【暗黑限定】召喚「市場崩盤」災難", "element": "FIRE", "alignment": "EVIL", "eventPayload": "evt_market_crash" },
 
-  { "id": "ritual_blessing", "name": "魔神賜福", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「魔神的祝福」", "element": "NEUTRAL", "alignment": "HOLY", "eventPayload": "evt_blessing" },
-  { "id": "ritual_guardian", "name": "守護天使", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「守護神降臨」", "element": "NEUTRAL", "alignment": "HOLY", "eventPayload": "evt_guardian" },
-  { "id": "ritual_economy", "name": "繁榮儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「經濟發達」", "element": "EARTH", "alignment": "HOLY", "eventPayload": "evt_economy" },
-  { "id": "ritual_wealth", "name": "財富儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「大豐收」祝福", "element": "NEUTRAL", "alignment": "HOLY", "eventPayload": "evt_harvest" },
-  { "id": "ritual_rain", "name": "祈雨儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「生命之雨」祝福", "element": "WATER", "alignment": "HOLY", "eventPayload": "evt_regenerate" },
-  { "id": "ritual_inspiration", "name": "靈感之光", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「靈感湧現」", "element": "AIR", "alignment": "HOLY", "eventPayload": "evt_inspiration" },
-  { "id": "ritual_peace", "name": "和平禱告", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「和平條約」", "element": "WATER", "alignment": "HOLY", "eventPayload": "evt_peace" },
-  { "id": "ritual_treasure", "name": "尋寶儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 70, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「發現寶藏」", "element": "EARTH", "alignment": "HOLY", "eventPayload": "evt_treasure" },
-  { "id": "ritual_wisdom", "name": "智慧啟蒙", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 50, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「古老智慧」", "element": "AIR", "alignment": "HOLY", "eventPayload": "evt_wisdom" },
-  { "id": "ritual_reinforce", "name": "堡壘加護", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「城牆加固」", "element": "EARTH", "alignment": "HOLY", "eventPayload": "evt_reinforce" },
-  { "id": "ritual_bloodlust", "name": "戰神祭典", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 70, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「戰神降臨」", "element": "FIRE", "alignment": "HOLY", "eventPayload": "evt_bloodlust" },
-  { "id": "ritual_knowledge", "name": "真理追求", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「學者來訪」祝福", "element": "AIR", "alignment": "HOLY", "eventPayload": "evt_scholar" },
-  { "id": "ritual_trade", "name": "貿易風", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 60, "value": 0, "hpCost": 0, "effectType": "trigger_event", "description": "【光明限定】召喚「新貿易線」", "element": "WATER", "alignment": "HOLY", "eventPayload": "evt_trade_route" },
+  { "id": "ritual_blessing", "name": "魔神賜福", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【光明限定】召喚「魔神的祝福」", "element": "NEUTRAL", "alignment": "HOLY", "eventPayload": "evt_blessing" },
+  { "id": "ritual_guardian", "name": "守護天使", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 80, "value": 0, "hpCost": 20, "effectType": "trigger_event", "description": "【光明限定】召喚「守護神降臨」", "element": "NEUTRAL", "alignment": "HOLY", "eventPayload": "evt_guardian" },
+  { "id": "ritual_economy", "name": "繁榮儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【光明限定】召喚「經濟發達」", "element": "EARTH", "alignment": "HOLY", "eventPayload": "evt_economy" },
+  { "id": "ritual_wealth", "name": "財富儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 50, "effectType": "trigger_event", "description": "【光明限定】召喚「大豐收」祝福", "element": "NEUTRAL", "alignment": "HOLY", "eventPayload": "evt_harvest" },
+  { "id": "ritual_rain", "name": "祈雨儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【光明限定】召喚「生命之雨」祝福", "element": "WATER", "alignment": "HOLY", "eventPayload": "evt_regenerate" },
+  { "id": "ritual_inspiration", "name": "靈感之光", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 80, "value": 0, "hpCost": 20, "effectType": "trigger_event", "description": "【光明限定】召喚「靈感湧現」", "element": "AIR", "alignment": "HOLY", "eventPayload": "evt_inspiration" },
+  { "id": "ritual_peace", "name": "和平禱告", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【光明限定】召喚「和平條約」", "element": "WATER", "alignment": "HOLY", "eventPayload": "evt_peace" },
+  { "id": "ritual_treasure", "name": "尋寶儀式", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 100, "value": 0, "hpCost": 40, "effectType": "trigger_event", "description": "【光明限定】召喚「發現寶藏」", "element": "EARTH", "alignment": "HOLY", "eventPayload": "evt_treasure" },
+  { "id": "ritual_wisdom", "name": "智慧啟蒙", "type": "RITUAL", "rarity": "RARE", "cost": 150, "manaCost": 80, "value": 0, "hpCost": 20, "effectType": "trigger_event", "description": "【光明限定】召喚「古老智慧」", "element": "AIR", "alignment": "HOLY", "eventPayload": "evt_wisdom" },
+  { "id": "ritual_reinforce", "name": "堡壘加護", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【光明限定】召喚「城牆加固」", "element": "EARTH", "alignment": "HOLY", "eventPayload": "evt_reinforce" },
+  { "id": "ritual_bloodlust", "name": "戰神祭典", "type": "RITUAL", "rarity": "EPIC", "cost": 250, "manaCost": 100, "value": 0, "hpCost": 40, "effectType": "trigger_event", "description": "【光明限定】召喚「戰神降臨」", "element": "FIRE", "alignment": "HOLY", "eventPayload": "evt_bloodlust" },
+  { "id": "ritual_knowledge", "name": "真理追求", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 20, "effectType": "trigger_event", "description": "【光明限定】召喚「學者來訪」祝福", "element": "AIR", "alignment": "HOLY", "eventPayload": "evt_scholar" },
+  { "id": "ritual_trade", "name": "貿易風", "type": "RITUAL", "rarity": "EPIC", "cost": 200, "manaCost": 100, "value": 0, "hpCost": 30, "effectType": "trigger_event", "description": "【光明限定】召喚「新貿易線」", "element": "WATER", "alignment": "HOLY", "eventPayload": "evt_trade_route" },
   
   // --- MAGIC ATTACKS ---
   { "id": "FIRE_atk_1", "name": "烈焰飛彈", "type": "MAGIC_ATTACK", "rarity": "COMMON", "cost": 40, "manaCost": 15, "value": 15, "effectType": "damage", "description": "初級元素攻擊", "element": "FIRE", "alignment": "HOLY" },
@@ -166,7 +131,7 @@ export const cardsData = [
   { "id": "AIR_atk_3", "name": "天空風暴", "type": "MAGIC_ATTACK", "rarity": "EPIC", "cost": 150, "manaCost": 70, "value": 60, "effectType": "damage", "description": "強大的元素衝擊", "element": "AIR", "alignment": "HOLY" },
   { "id": "AIR_atk_4", "name": "無形審判", "type": "MAGIC_ATTACK", "rarity": "LEGENDARY", "cost": 300, "manaCost": 100, "value": 100, "effectType": "damage", "description": "毀滅性的終極魔法", "element": "AIR", "alignment": "EVIL" },
   
-  // --- RUNES ---
+  // --- RUNES (Nerfed Values) ---
   { "id": "FIRE_rune_1", "name": "烈焰符文 I", "type": "RUNE", "rarity": "COMMON", "cost": 50, "manaCost": 10, "value": 5, "effectType": "buff_damage", "description": "賦予物理卡 烈焰 屬性，傷害 +5", "element": "FIRE", "alignment": undefined, "runeLevel": 1 },
   { "id": "FIRE_rune_2", "name": "燃燒符文 II", "type": "RUNE", "rarity": "RARE", "cost": 120, "manaCost": 30, "value": 12, "effectType": "buff_damage", "description": "賦予物理卡 烈焰 屬性，傷害 +12", "element": "FIRE", "alignment": undefined, "runeLevel": 2 },
   { "id": "FIRE_rune_3", "name": "地獄符文 III", "type": "RUNE", "rarity": "EPIC", "cost": 250, "manaCost": 60, "value": 25, "effectType": "buff_damage", "description": "賦予物理卡 烈焰 屬性，傷害 +25", "element": "FIRE", "alignment": undefined, "runeLevel": 3 },

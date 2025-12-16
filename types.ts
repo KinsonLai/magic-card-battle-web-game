@@ -1,4 +1,5 @@
 
+
 export enum NationType {
   FIGHTER = 'FIGHTER',
   HOLY = 'HOLY',
@@ -11,13 +12,11 @@ export enum CardType {
   ATTACK = 'ATTACK', 
   MAGIC_ATTACK = 'MAGIC_ATTACK',
   HEAL = 'HEAL',
-  SPECIAL = 'SPECIAL', // Kept for backward compatibility
+  SPECIAL = 'SPECIAL',
   CONTRACT = 'CONTRACT',
   RUNE = 'RUNE', 
   RITUAL = 'RITUAL', 
-  ARTIFACT = 'ARTIFACT',
-  BLESSING = 'BLESSING',
-  CURSE = 'CURSE'
+  ARTIFACT = 'ARTIFACT'
 }
 
 export enum ElementType {
@@ -46,43 +45,31 @@ export enum Rarity {
   LEGENDARY = 'LEGENDARY'
 }
 
-export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact' | 'cleanse' | 'draw_cards' | 'apply_state';
-
-export interface ActiveState {
-    id: string;
-    name: string;
-    type: 'BLESSING' | 'CURSE';
-    description: string;
-    icon: string; // Lucide icon name
-    triggerChance: number; // 0.0 to 1.0 (e.g. 0.3 for 30%)
-    effectType: 'heal' | 'damage' | 'gold_gain' | 'gold_loss' | 'mana_gain' | 'mana_loss';
-    effectValue: number;
-}
+export type EffectType = 'damage' | 'heal' | 'mana' | 'income' | 'gold_gain' | 'gold_steal' | 'full_restore_hp' | 'full_restore_mana' | 'full_restore_all' | 'buff_damage' | 'stun' | 'discard_opponent' | 'mana_burn' | 'destroy_land' | 'trigger_event' | 'equip_artifact';
 
 export interface Card {
   id: string;
   name: string; 
   type: CardType;
   element: ElementType;
-  alignment?: AlignmentType; 
+  alignment?: AlignmentType; // For Runes/Rituals/Magic
   rarity: Rarity;
   effectType?: EffectType;
   cost: number;
   hpCost?: number; 
   manaCost: number;
   description: string;
-  value?: number; 
+  value?: number; // Base Value
   
+  // Dual Alignment Bonuses for Physical Weapons
   holyBonus?: number;
   evilBonus?: number;
 
   runeLevel?: number; 
   isDisposable?: boolean;
   eventPayload?: string; 
+  // Shop tracking
   purchasedByPlayerIds?: string[];
-  
-  // For State Cards
-  stateData?: ActiveState;
 }
 
 export interface GameEvent {
@@ -122,20 +109,18 @@ export interface Player {
   isBleeding?: boolean;
   techShield?: number;
   
-  soul: number; 
-  elementMark: ElementType | null; 
-  maxPlaysModifier?: number; 
+  // New Soul System
+  soul: number; // -3 to 3
+  elementMark: ElementType | null; // Current element primed on player
+  maxPlaysModifier?: number; // For Mire effect
 
   maxPlays: number; 
   shopDiscount?: boolean; 
-  botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts'; 
+  botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts'; // Added 'mcts'
   playsUsed: number;
   hasPurchasedInShop: boolean;
   currentStance?: StanceType;
-  isAdmin?: boolean;
-  
-  // New System
-  activeStates: ActiveState[];
+  isMuted?: boolean;
 }
 
 export interface RoomPlayer {
@@ -145,19 +130,18 @@ export interface RoomPlayer {
   isHost: boolean;
   isBot: boolean;
   isReady: boolean; 
+  isMuted?: boolean; // New
   botDifficulty?: 'easy' | 'normal' | 'hard' | 'mcts';
-  isAdmin?: boolean; 
 }
 
 export interface RoomInfo {
-    id: string;
-    name: string;
-    playerCount: number;
-    maxPlayers: number;
-    isPublic: boolean;
-    hasPassword: boolean;
-    hostName: string;
-    status: 'WAITING' | 'PLAYING';
+  id: string;
+  name: string;
+  isPrivate: boolean;
+  playerCount: number;
+  maxPlayers: number;
+  status: 'WAITING' | 'PLAYING';
+  hostName: string;
 }
 
 export interface GameSettings {
@@ -174,20 +158,12 @@ export interface GameSettings {
   healthMultiplier: number;
   damageMultiplier: number;
   priceMultiplier: number;
-  rarityWeights: {
+  rarityWeights?: {
       common: number;
       rare: number;
       epic: number;
       legendary: number;
   };
-  // Advanced Settings
-  manaRegenPerTurn: number;
-  maxPlaysPerTurn: number;
-  enableRandomEvents: boolean;
-  banRitualCards: boolean;
-  randomizeNations: boolean;
-  freeShopMode: boolean; // Cost is 0
-  crazyMode: boolean; // Events every turn, double income/mana
 }
 
 export interface ActionEvent {
@@ -202,7 +178,6 @@ export interface ActionEvent {
   elementalModifier?: number;
   comboName?: string;
   reflectedDamage?: number; 
-  message?: string;
 }
 
 export type ReactionType = 'SPREAD' | 'MIRE' | 'ANNIHILATION' | 'OVERLOAD' | 'PRIME';
@@ -215,8 +190,10 @@ export interface PendingAttack {
   element: ElementType;
   alignment?: AlignmentType; 
   attackType: CardType;
+  
+  // New Reaction Logic
   reaction?: ReactionType;
-  reactionEffectValue?: number; 
+  reactionEffectValue?: number; // e.g., self damage amount or heal amount
 }
 
 export interface GameState {
@@ -237,8 +214,9 @@ export interface GameState {
   isDisconnected?: boolean;
   disconnectTime?: number;
   triggeredArtifacts?: string[]; 
-  topNotification?: { message: string, type: 'event' | 'artifact' | 'info' | 'warning' | 'error' }; 
+  topNotification?: { message: string, type: 'event' | 'artifact' | 'info' }; 
   
+  // Socket Extra
   roomId?: string;
   isMultiplayer?: boolean;
 }
@@ -255,18 +233,19 @@ export interface ChatMessage {
   sender: string;
   text: string;
   isSystem?: boolean;
-  isAdmin?: boolean;
 }
 
+// Data Record for ML Training
 export interface BattleRecord {
     turn: number;
-    player: string; 
-    stateVector: number[]; 
-    policyTarget: number[]; 
-    valueTarget: number; 
+    player: string; // Nation
+    stateVector: number[]; // Simplified numeric representation of state
+    policyTarget: number[]; // Probability distribution over actions (from MCTS)
+    valueTarget: number; // Final game result (-1 or 1)
     actionTaken: string;
 }
 
+// Socket Action Types
 export type ClientAction = 
   | { type: 'PLAY_CARD', cardId: string, targetId?: string }
   | { type: 'ATTACK', cardIds: string[], targetId: string }
@@ -275,11 +254,9 @@ export type ClientAction =
   | { type: 'BUY_CARD', cardId: string }
   | { type: 'SELL_CARD', cardId: string }
   | { type: 'END_TURN' }
-  | { type: 'REPLACE_LAND', cardId: string, slotIndex: number }
-  | { type: 'SEND_CHAT', message: string }
-  | { type: 'ADMIN_COMMAND', command: string };
+  | { type: 'SEND_CHAT', message: string };
 
-export const MAX_LAND_SIZE = 3; // Changed from 5 to 3
+export const MAX_LAND_SIZE = 5;
 export const MAX_ARTIFACT_SIZE = 3;
 export const PLAYS_PER_TURN = 3;
 

@@ -1,5 +1,6 @@
 
-import { GameState, Player, NationType, Card, CardType, ElementType, AlignmentType, StanceType, MAX_LAND_SIZE, LogEntry, GameSettings, ActionEvent, RoomPlayer, GameEvent, MAX_ARTIFACT_SIZE, Rarity, PLAYS_PER_TURN, ReactionType, ActiveState } from '../types';
+
+import { GameState, Player, NationType, Card, CardType, ElementType, AlignmentType, StanceType, MAX_LAND_SIZE, LogEntry, GameSettings, ActionEvent, RoomPlayer, GameEvent, MAX_ARTIFACT_SIZE, Rarity, PLAYS_PER_TURN, ReactionType } from '../types';
 import { CARDS, NATION_CONFIG, getRandomCards, ELEMENT_RELATIONSHIPS, getComplexElementName, GAME_EVENTS as EVENTS_LIST, ELEMENT_CONFIG } from '../constants';
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -20,14 +21,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
       rare: 30,
       epic: 8,
       legendary: 2
-  },
-  manaRegenPerTurn: 15,
-  maxPlaysPerTurn: PLAYS_PER_TURN,
-  enableRandomEvents: true,
-  banRitualCards: false,
-  randomizeNations: false,
-  freeShopMode: false,
-  crazyMode: false
+  }
 };
 
 const MAX_TURNS = 100; // Hard limit to prevent infinite loops
@@ -40,13 +34,9 @@ const getWeightedRandomCards = (count: number, turn: number, settings?: GameSett
     let wEpic = settings?.rarityWeights?.epic || 8;
     let wLegendary = settings?.rarityWeights?.legendary || 2;
 
-    if (settings?.crazyMode) {
-        wCommon = 10; wRare = 30; wEpic = 40; wLegendary = 20;
-    } else {
-        if (turn > 5) { wCommon -= 10; wRare += 5; wEpic += 4; wLegendary += 1; }
-        if (turn > 10) { wCommon -= 10; wRare -= 5; wEpic += 10; wLegendary += 5; }
-        if (turn > 20) { wCommon -= 10; wEpic += 5; wLegendary += 5; }
-    }
+    if (turn > 5) { wCommon -= 10; wRare += 5; wEpic += 4; wLegendary += 1; }
+    if (turn > 10) { wCommon -= 10; wRare -= 5; wEpic += 10; wLegendary += 5; }
+    if (turn > 20) { wCommon -= 10; wEpic += 5; wLegendary += 5; }
 
     wCommon = Math.max(0, wCommon);
     wRare = Math.max(0, wRare);
@@ -55,16 +45,11 @@ const getWeightedRandomCards = (count: number, turn: number, settings?: GameSett
     
     const totalWeight = wCommon + wRare + wEpic + wLegendary;
 
-    let availableCards = CARDS;
-    if (settings?.banRitualCards) {
-        availableCards = availableCards.filter(c => c.type !== CardType.RITUAL);
-    }
-
     const cardsByRarity = {
-        [Rarity.COMMON]: availableCards.filter(c => c.rarity === Rarity.COMMON),
-        [Rarity.RARE]: availableCards.filter(c => c.rarity === Rarity.RARE),
-        [Rarity.EPIC]: availableCards.filter(c => c.rarity === Rarity.EPIC),
-        [Rarity.LEGENDARY]: availableCards.filter(c => c.rarity === Rarity.LEGENDARY),
+        [Rarity.COMMON]: CARDS.filter(c => c.rarity === Rarity.COMMON),
+        [Rarity.RARE]: CARDS.filter(c => c.rarity === Rarity.RARE),
+        [Rarity.EPIC]: CARDS.filter(c => c.rarity === Rarity.EPIC),
+        [Rarity.LEGENDARY]: CARDS.filter(c => c.rarity === Rarity.LEGENDARY),
     };
 
     for (let i = 0; i < count; i++) {
@@ -80,15 +65,11 @@ const getWeightedRandomCards = (count: number, turn: number, settings?: GameSett
         const pool = cardsByRarity[selectedRarity];
         if (pool.length > 0) {
             let card = pool[Math.floor(Math.random() * pool.length)];
-            let cost = card.cost;
-            if (settings) {
-                if (settings.freeShopMode) cost = 0;
-                else if (settings.priceMultiplier !== 1) cost = Math.floor(cost * settings.priceMultiplier);
+            if (settings && settings.priceMultiplier !== 1) {
+                card = { ...card, cost: Math.floor(card.cost * settings.priceMultiplier) };
             }
-            
-            result.push({ ...card, cost, id: `${card.id}_${Math.random().toString(36).substr(2, 9)}`, purchasedByPlayerIds: [] });
+            result.push({ ...card, id: `${card.id}_${Math.random().toString(36).substr(2, 9)}`, purchasedByPlayerIds: [] });
         } else {
-            // Fallback
             const card = CARDS[Math.floor(Math.random() * CARDS.length)];
             result.push({ ...card, id: `${card.id}_${Math.random().toString(36).substr(2, 9)}`, purchasedByPlayerIds: [] });
         }
@@ -112,13 +93,7 @@ const calculatePlayerIncome = (p: Player, incomeMult: number): number => {
 
 export const createInitialState = (roomPlayers: RoomPlayer[], settings: GameSettings = DEFAULT_SETTINGS): GameState => {
   const createPlayer = (rp: RoomPlayer): Player => {
-    let nation = rp.nation;
-    if (settings.randomizeNations) {
-        const nations = Object.values(NationType);
-        nation = nations[Math.floor(Math.random() * nations.length)];
-    }
-
-    const config = NATION_CONFIG[nation];
+    const config = NATION_CONFIG[rp.nation];
     let startingHand: Card[] = [];
     
     const startCard = CARDS.find(c => c.id === config.startCardId);
@@ -126,16 +101,16 @@ export const createInitialState = (roomPlayers: RoomPlayer[], settings: GameSett
     startingHand = [...startingHand, ...getWeightedRandomCards(2, 1, settings)];
 
     let gold = settings.initialGold + config.goldBonus;
-    if (nation === NationType.COMMERCIAL) gold += 50;
+    if (rp.nation === NationType.COMMERCIAL) gold += 50;
 
     const maxHp = Math.floor((100 + config.hpBonus) * settings.healthMultiplier);
-    const baseIncome = (20 + (nation === NationType.COMMERCIAL ? 10 : 0)) * settings.incomeMultiplier;
+    const baseIncome = (20 + (rp.nation === NationType.COMMERCIAL ? 10 : 0)) * settings.incomeMultiplier;
 
     const p: Player = {
       id: rp.id,
       name: rp.name,
       isHuman: !rp.isBot,
-      nation: nation,
+      nation: rp.nation,
       hp: maxHp,
       maxHp: maxHp,
       mana: settings.initialMana + config.manaBonus,
@@ -151,14 +126,14 @@ export const createInitialState = (roomPlayers: RoomPlayer[], settings: GameSett
       botDifficulty: rp.botDifficulty,
       playsUsed: 0,
       hasPurchasedInShop: false,
+      // SOUL SYSTEM
       soul: 0,
       elementMark: null,
       isBleeding: false,
       techShield: 0,
-      maxPlays: settings.maxPlaysPerTurn,
+      maxPlays: PLAYS_PER_TURN,
       shopDiscount: false,
-      isAdmin: rp.isAdmin,
-      activeStates: []
+      isMuted: rp.isMuted
     };
     p.calculatedIncome = calculatePlayerIncome(p, settings.incomeMultiplier);
     return p;
@@ -196,6 +171,8 @@ export const nextTurn = (state: GameState): GameState => {
 
   // --- HARD LIMIT CHECK ---
   if (nextTurnNum > MAX_TURNS) {
+      // Game Over by Time Limit
+      // Determine winner by HP
       const sortedPlayers = [...state.players].sort((a, b) => b.hp - a.hp);
       const winner = sortedPlayers[0];
       return {
@@ -232,10 +209,7 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
       newShop = getWeightedRandomCards(state.settings.shopSize, nextTurnNum, state.settings);
   }
 
-  // Event Logic (Crazy Mode or Standard)
-  const isEventTurn = state.settings.crazyMode ? true : (state.settings.enableRandomEvents && nextTurnNum >= 5 && (nextTurnNum - 5) % state.settings.eventFrequency === 0);
-  
-  if (nextIndex === 0 && isEventTurn && nextTurnNum !== state.turn) {
+  if (nextIndex === 0 && nextTurnNum >= 5 && (nextTurnNum - 5) % state.settings.eventFrequency === 0 && nextTurnNum !== state.turn) {
       const randomEvent = EVENTS_LIST[Math.floor(Math.random() * EVENTS_LIST.length)];
       currentEvent = randomEvent;
       eventMsg = `【${randomEvent.type === 'DISASTER' ? '災難' : '祝福'}】${randomEvent.name}: ${randomEvent.description}`;
@@ -246,56 +220,23 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
   const triggeredArtifacts: string[] = [];
   
   const processedPlayers = newState.players.map(p => {
-      let activeP = { ...p };
-      
       // Bleeding
-      if (activeP.id === newState.players[nextIndex].id && activeP.isBleeding) {
+      if (p.id === newState.players[nextIndex].id && p.isBleeding) {
           const bleedDamage = 15; 
-          const newHp = Math.max(1, activeP.hp - bleedDamage);
+          const newHp = Math.max(1, p.hp - bleedDamage);
           logs.push({ 
               id: Date.now().toString() + Math.random(), 
-              message: `${activeP.name} 傷口裂開 (流血)，受到 ${bleedDamage} 點傷害。`, 
+              message: `${p.name} 傷口裂開 (流血)，受到 ${bleedDamage} 點傷害。`, 
               type: 'combat', 
               timestamp: Date.now() 
           });
-          activeP.hp = newHp;
-          activeP.isBleeding = false; 
+          return { ...p, hp: newHp, isBleeding: false }; 
       }
-
-      // --- NEW STATE TRIGGER LOGIC (Blessings/Curses) ---
-      if (activeP.id === newState.players[nextIndex].id && activeP.activeStates.length > 0) {
-          activeP.activeStates.forEach(state => {
-              if (Math.random() < state.triggerChance) {
-                  let val = state.effectValue;
-                  if (state.effectType === 'heal') {
-                      activeP.hp = Math.min(activeP.maxHp, activeP.hp + val);
-                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！恢復了 ${val} 生命。`, type: 'info', timestamp: Date.now() });
-                  } else if (state.effectType === 'damage') {
-                      activeP.hp = Math.max(1, activeP.hp - val);
-                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！受到了 ${val} 傷害。`, type: 'combat', timestamp: Date.now() });
-                  } else if (state.effectType === 'gold_gain') {
-                      activeP.gold += val;
-                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！獲得了 ${val} 金錢。`, type: 'economy', timestamp: Date.now() });
-                  } else if (state.effectType === 'gold_loss') {
-                      activeP.gold = Math.max(0, activeP.gold - val);
-                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！遺失了 ${val} 金錢。`, type: 'economy', timestamp: Date.now() });
-                  } else if (state.effectType === 'mana_gain') {
-                      activeP.mana = Math.min(activeP.maxMana, activeP.mana + val);
-                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！恢復了 ${val} 魔力。`, type: 'info', timestamp: Date.now() });
-                  } else if (state.effectType === 'mana_loss') {
-                      activeP.mana = Math.max(0, activeP.mana - val);
-                      logs.push({ id: Date.now() + Math.random().toString(), message: `【${state.name}】觸發！流失了 ${val} 魔力。`, type: 'info', timestamp: Date.now() });
-                  }
-              }
-          });
-      }
-
-      return activeP;
+      return p;
   });
 
   const updatedPlayers = processedPlayers.map((p, idx) => {
     let incomeMultiplier = state.settings.incomeMultiplier;
-    if (state.settings.crazyMode) incomeMultiplier *= 2;
     if (currentEvent?.globalModifier?.incomeMultiplier !== undefined) incomeMultiplier *= currentEvent.globalModifier.incomeMultiplier;
 
     const calcIncome = calculatePlayerIncome(p, incomeMultiplier);
@@ -323,7 +264,7 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
         }
     });
 
-    let maxPlays = state.settings.maxPlaysPerTurn;
+    let maxPlays = PLAYS_PER_TURN;
     // Apply Mire Effect (Slow)
     if (p.maxPlaysModifier) {
         maxPlays += p.maxPlaysModifier;
@@ -338,10 +279,7 @@ const processTurnStart = (state: GameState, nextIndex: number, nextTurnNum: numb
     }
 
     let newGold = p.gold + calcIncome;
-    let regen = state.settings.manaRegenPerTurn + artifactMana;
-    if (state.settings.crazyMode) regen *= 2;
-    
-    let newMana = Math.min(p.maxMana, p.mana + regen); 
+    let newMana = Math.min(p.maxMana, p.mana + 15 + artifactMana); 
 
     let pAfterEvent = { ...p };
     if (currentEvent?.turnEffect) {
@@ -457,10 +395,7 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
             currentPlayer.lands = [...currentPlayer.lands, card];
             logMsg += `，建造了新的產業。`;
         } else {
-            // Should be handled by REPLACE_LAND action, this is a fallback or for AI
-            const [removed, ...rest] = currentPlayer.lands;
-            currentPlayer.lands = [...rest, card];
-            logMsg += `，拆除舊產業並建造了新產業。`;
+            logMsg += `，但領土已滿 (產業被消耗)。`;
         }
         newPlayers[playerIndex] = currentPlayer;
     } 
@@ -469,9 +404,7 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
             currentPlayer.artifacts = [...currentPlayer.artifacts, card];
             logMsg += `，裝備了神器。`;
         } else {
-             const [removed, ...rest] = currentPlayer.artifacts;
-             currentPlayer.artifacts = [...rest, card];
-             logMsg += `，替換了舊神器。`;
+             logMsg += `，但神器欄位已滿。`;
         }
         newPlayers[playerIndex] = currentPlayer;
     }
@@ -479,34 +412,6 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
         const val = card.effectType === 'full_restore_hp' ? currentPlayer.maxHp : (card.value || 0);
         currentPlayer.hp = Math.min(currentPlayer.maxHp, currentPlayer.hp + val);
         logMsg += `，恢復了 ${val} 點生命。`;
-        newPlayers[playerIndex] = currentPlayer;
-    }
-    else if (card.type === CardType.BLESSING && card.stateData) {
-        // --- NEW LOGIC: BLESSING REPLACES CURSES ---
-        const hasCurses = currentPlayer.activeStates.some(s => s.type === 'CURSE');
-        if (hasCurses) {
-            currentPlayer.activeStates = currentPlayer.activeStates.filter(s => s.type !== 'CURSE');
-            logMsg += `，神聖之力淨化了所有詛咒！`;
-        } else {
-            logMsg += `，獲得了祝福狀態。`;
-        }
-        // Add new blessing
-        currentPlayer.activeStates.push(card.stateData);
-        newPlayers[playerIndex] = currentPlayer;
-    }
-    else if (card.type === CardType.CURSE && targetPlayer && card.stateData) {
-        // --- NEW LOGIC: CURSE REPLACES BLESSINGS ---
-        let tPlayer = { ...targetPlayer };
-        const hasBlessings = tPlayer.activeStates.some(s => s.type === 'BLESSING');
-        if (hasBlessings) {
-            tPlayer.activeStates = tPlayer.activeStates.filter(s => s.type !== 'BLESSING');
-            logMsg += `，邪惡力量吞噬了 ${tPlayer.name} 的所有祝福！`;
-        } else {
-            logMsg += `，詛咒了 ${tPlayer.name}。`;
-        }
-        // Add new curse
-        tPlayer.activeStates.push(card.stateData);
-        newPlayers[targetPlayerIndex] = tPlayer;
         newPlayers[playerIndex] = currentPlayer;
     }
     else if (card.type === CardType.RITUAL) {
@@ -550,13 +455,6 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
             currentPlayer.gold += (card.value || 0);
             logMsg += `，獲得了 ${card.value} 金幣。`;
         }
-        else if (card.effectType === 'gold_steal' && targetPlayer) {
-             const stolen = Math.min(targetPlayer.gold, card.value || 0);
-             targetPlayer.gold -= stolen;
-             currentPlayer.gold += stolen;
-             logMsg += `，從 ${targetPlayer.name} 偷取了 ${stolen} 金錢！`;
-             newPlayers[targetPlayerIndex] = targetPlayer;
-        }
         newPlayers[playerIndex] = currentPlayer;
     }
     
@@ -582,60 +480,6 @@ export const executeCardEffect = (state: GameState, card: Card, targetId?: strin
     };
 };
 
-export const replaceLand = (state: GameState, newCardId: string, slotIndex: number): GameState => {
-    const playerIndex = state.currentPlayerIndex;
-    const player = state.players[playerIndex];
-    
-    // Find card in hand
-    const cardIndex = player.hand.findIndex(c => c.id === newCardId);
-    if (cardIndex === -1) return state;
-    
-    const card = player.hand[cardIndex];
-    const newHand = [...player.hand];
-    newHand.splice(cardIndex, 1);
-
-    // Validate slot
-    if (slotIndex < 0 || slotIndex >= player.lands.length) return state;
-
-    // Costs
-    const newPlayer = {
-        ...player,
-        hand: newHand,
-        mana: player.mana - card.manaCost,
-        hp: player.hp - (card.hpCost || 0),
-        playsUsed: player.playsUsed + 1
-    };
-
-    // Replace land
-    const oldLand = newPlayer.lands[slotIndex];
-    const newLands = [...newPlayer.lands];
-    newLands[slotIndex] = card;
-    newPlayer.lands = newLands;
-
-    const newPlayers = [...state.players];
-    newPlayers[playerIndex] = newPlayer;
-
-    return {
-        ...state,
-        players: newPlayers,
-        gameLog: [...state.gameLog, { 
-            id: Date.now().toString(), 
-            message: `${player.name} 拆除了 ${oldLand.name} 並建造了 ${card.name}。`, 
-            type: 'economy', 
-            timestamp: Date.now() 
-        }],
-        lastAction: {
-            id: Date.now().toString(),
-            sourceId: player.id,
-            targetId: null,
-            cardId: card.id,
-            cardsPlayed: [card],
-            type: CardType.INDUSTRY,
-            timestamp: Date.now()
-        }
-    };
-};
-
 export const executeAttackAction = (state: GameState, cards: Card[], targetId: string): GameState => {
     const playerIndex = state.currentPlayerIndex;
     const player = state.players[playerIndex];
@@ -651,6 +495,10 @@ export const executeAttackAction = (state: GameState, cards: Card[], targetId: s
     let soulDelta = 0;
     let penaltyHp = 0;
 
+    // Distinguish between Physical Stack and Magic Stack
+    // Physical: 1 Weapon + N Runes
+    // Magic: N Magic Attacks (No Runes)
+    
     const isMagicAttack = cards[0].type === CardType.MAGIC_ATTACK;
     const weapon = !isMagicAttack ? cards.find(c => c.type === CardType.ATTACK) : null;
     const runes = !isMagicAttack ? cards.filter(c => c.type === CardType.RUNE) : [];
@@ -903,8 +751,7 @@ export const resolveAttack = (state: GameState, cardsPlayed: Card[], _isRepel: b
             cardsPlayed, 
             type: 'REPEL', 
             totalValue: counterPower,
-            timestamp: Date.now(),
-            message: logMessage // Added details for notification
+            timestamp: Date.now()
         },
         winnerId: newPlayers.filter(p => !p.isDead).length <= 1 ? newPlayers.find(p => !p.isDead)?.id || null : null
     };

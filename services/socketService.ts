@@ -1,34 +1,22 @@
 
 import { io, Socket } from 'socket.io-client';
-import { ClientAction, GameState, RoomPlayer, RoomInfo, GameSettings } from '../types';
+import { ClientAction, GameSettings, GameState, RoomInfo, RoomPlayer, ChatMessage } from '../types';
 
 class SocketService {
   private socket: Socket | null = null;
-  private url: string = (import.meta as any).env?.VITE_SERVER_URL || 
-                        ((import.meta as any).env?.PROD ? window.location.origin : 'http://localhost:3000');
-  
-  // Buffer for listeners registered before connection or needing re-attachment
-  private pendingListeners: Map<string, Array<(...args: any[]) => void>> = new Map();
+  private url: string = 'http://localhost:3000'; 
 
-  public connect(url?: string): Promise<void> {
-    if (url) this.url = url;
-    
+  public connect(url: string): Promise<void> {
+    this.url = url;
     return new Promise((resolve, reject) => {
-      // If already connected, ensure listeners are up to date and resolve
-      if (this.socket && this.socket.connected) {
-          this.flushPendingListeners(); // CRITICAL FIX: Always flush pending even if already connected
-          resolve();
-          return;
-      }
-
-      this.socket = io(this.url, {
-        transports: ['websocket'],
-        reconnectionAttempts: 3
+      this.socket = io(url, {
+        reconnectionAttempts: 5,
+        timeout: 10000,
+        autoConnect: true
       });
 
       this.socket.on('connect', () => {
         console.log('Socket connected:', this.socket?.id);
-        this.flushPendingListeners();
         resolve();
       });
 
@@ -37,17 +25,6 @@ class SocketService {
         reject(err);
       });
     });
-  }
-
-  private flushPendingListeners() {
-      if (!this.socket) return;
-      this.pendingListeners.forEach((callbacks, event) => {
-          callbacks.forEach(cb => {
-              // Prevent duplicates by turning off first (safe to call multiple times)
-              this.socket?.off(event, cb);
-              this.socket?.on(event, cb);
-          });
-      });
   }
 
   public disconnect() {
@@ -65,127 +42,80 @@ class SocketService {
     return this.socket?.id;
   }
 
-  // --- Internal Helper for Event Management ---
-  
-  private on(event: string, callback: (...args: any[]) => void): () => void {
-      // 1. Add to pending buffer
-      if (!this.pendingListeners.has(event)) {
-          this.pendingListeners.set(event, []);
-      }
-      const list = this.pendingListeners.get(event)!;
-      if (!list.includes(callback)) {
-          list.push(callback);
-      }
-
-      // 2. If socket exists, attach immediately
-      if (this.socket) {
-          this.socket.off(event, callback); // Safety check
-          this.socket.on(event, callback);
-      }
-
-      // 3. Return cleanup function
-      return () => {
-          const currentList = this.pendingListeners.get(event);
-          if (currentList) {
-              this.pendingListeners.set(event, currentList.filter(fn => fn !== callback));
-          }
-          if (this.socket) {
-              this.socket.off(event, callback);
-          }
-      };
-  }
-
   // --- Lobby Events ---
 
-  public getRooms(callback: (rooms: RoomInfo[]) => void) {
-      this.socket?.emit('get_rooms', callback);
+  public getRooms() {
+      this.socket?.emit('get_rooms');
   }
 
-  public onRoomsChanged(callback: () => void) {
-      return this.on('rooms_changed', callback);
+  public onRoomListUpdate(callback: (rooms: RoomInfo[]) => void) {
+      this.socket?.on('room_list_update', callback);
   }
 
-  public createRoom(params: { player: Partial<RoomPlayer>, roomName: string, password?: string, isPublic: boolean }, callback: (roomId: string) => void) {
-    this.socket?.emit('create_room', params, (response: any) => {
-        if (response.roomId) callback(response.roomId);
-    });
+  public createRoom(data: { player: Partial<RoomPlayer>, roomName: string, isPrivate: boolean, password?: string }, callback: (res: any) => void) {
+    this.socket?.emit('create_room', data, callback);
   }
 
-  public joinRoom(roomId: string, player: Partial<RoomPlayer>, password: string | undefined, callback: (success: boolean, msg?: string, needsPassword?: boolean) => void) {
-    this.socket?.emit('join_room', { roomId, player, password }, (response: any) => {
-        callback(response.success, response.message, response.needsPassword);
-    });
+  public joinRoom(data: { roomId: string, player: Partial<RoomPlayer>, password?: string }, callback: (res: any) => void) {
+    this.socket?.emit('join_room', data, callback);
   }
+
+  public onKicked(callback: () => void) {
+      this.socket?.on('kicked', callback);
+  }
+
+  // --- Room Wait Events ---
 
   public toggleReady() {
       this.socket?.emit('toggle_ready');
-  }
-
-  public addBot() {
-      this.socket?.emit('add_bot');
-  }
-
-  public kickPlayer(targetId: string) {
-      this.socket?.emit('kick_player', targetId);
   }
 
   public updateSettings(settings: GameSettings) {
       this.socket?.emit('update_settings', settings);
   }
 
-  public onSettingsUpdate(callback: (settings: GameSettings) => void) {
-      return this.on('settings_update', callback);
+  public kickPlayer(playerId: string) {
+      this.socket?.emit('kick_player', playerId);
   }
 
-  public startGame(callback?: (res: {success: boolean, message?: string}) => void) {
-    this.socket?.emit('start_game', (response: any) => {
-        if (callback) callback(response);
-    });
+  public mutePlayer(playerId: string) {
+      this.socket?.emit('mute_player', playerId);
   }
 
-  public onRoomUpdate(callback: (players: RoomPlayer[], hostId: string) => void) {
-    const wrapper = (data: { players: RoomPlayer[], hostId: string }) => {
-        callback(data.players, data.hostId);
-    };
-    return this.on('room_update', wrapper);
+  public transferHost(playerId: string) {
+      this.socket?.emit('transfer_host', playerId);
   }
 
-  public onKicked(callback: () => void) {
-      return this.on('kicked', callback);
+  public addBot() {
+      this.socket?.emit('add_bot');
   }
 
-  public loginAdmin(user: string, passHash: string, callback: (success: boolean) => void) {
-      this.socket?.emit('admin_login', { user, passHash }, callback);
+  public sendChat(msg: string) {
+      this.socket?.emit('send_chat', msg);
   }
 
-  // --- Admin Methods ---
-
-  public adminGetRooms() {
-      this.socket?.emit('admin_get_rooms');
+  public onRoomUpdate(callback: (data: { players: RoomPlayer[], settings: GameSettings }) => void) {
+    this.socket?.on('room_update', callback);
   }
 
-  public adminDeleteRoom(roomId: string) {
-      this.socket?.emit('admin_delete_room', roomId);
+  public onChatMessage(callback: (msg: ChatMessage) => void) {
+      this.socket?.on('chat_message', callback);
   }
 
-  public adminJoinRoom(roomId: string, callback: (res: any) => void) {
-      this.socket?.emit('admin_join_room', roomId, callback);
-  }
-
-  public onAdminRoomList(callback: (rooms: any[]) => void) {
-      return this.on('admin_room_list', callback);
+  public startGame() {
+    this.socket?.emit('start_game');
   }
 
   // --- Game Events ---
 
   public onGameStart(callback: (initialState: GameState) => void) {
-    return this.on('game_start', (state: GameState) => {
+    this.socket?.on('game_start', (state: GameState) => {
         callback(state);
     });
   }
 
   public onStateUpdate(callback: (state: GameState) => void) {
-    return this.on('state_update', (state: GameState) => {
+    this.socket?.on('state_update', (state: GameState) => {
         callback(state);
     });
   }
@@ -197,7 +127,7 @@ class SocketService {
   }
 
   public onLog(callback: (msg: string) => void) {
-      return this.on('server_log', (msg: string) => callback(msg));
+      this.socket?.on('server_log', (msg: string) => callback(msg));
   }
 }
 
