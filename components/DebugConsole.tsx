@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { GameState, CardType, ElementType, StanceType, NationType } from '../types';
 import { executeCardEffect, executeAttackAction, resolveAttack, nextTurn, createInitialState, DEFAULT_SETTINGS } from '../services/gameEngine';
+import { socketService } from '../services/socketService';
 import { CARDS } from '../constants';
-import { Terminal, Play, AlertCircle, CheckCircle, XCircle, RefreshCw, Cpu } from 'lucide-react';
+import { Terminal, Play, AlertCircle, CheckCircle, XCircle, RefreshCw, Cpu, Wifi } from 'lucide-react';
 
 interface DebugConsoleProps {
     gameState: GameState | null;
@@ -96,6 +97,15 @@ export const DebugConsole: React.FC<DebugConsoleProps> = ({ gameState, setGameSt
 
     const cheat = (action: string) => {
         if (!gameState) return;
+
+        // Multiplayer Cheat (Send to Server)
+        if (gameState.isMultiplayer) {
+            socketService.emitAction({ type: 'ADMIN_COMMAND', command: action });
+            addLog(`Sent Server Command: ${action}`, 'pass');
+            return;
+        }
+
+        // Local Cheat
         let newState = { ...gameState };
         const p = newState.players.find(p => p.isHuman);
         if (!p) return;
@@ -111,7 +121,7 @@ export const DebugConsole: React.FC<DebugConsoleProps> = ({ gameState, setGameSt
         }
 
         setGameState(newState);
-        addLog(`Executed: ${action}`, 'pass');
+        addLog(`Executed Local: ${action}`, 'pass');
     };
 
     return (
@@ -138,22 +148,35 @@ export const DebugConsole: React.FC<DebugConsoleProps> = ({ gameState, setGameSt
                         </div>
 
                         <div>
-                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><RefreshCw size={12}/> State Modifiers</h4>
+                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
+                                <RefreshCw size={12}/> 
+                                {gameState?.isMultiplayer ? 'Network Commands' : 'State Modifiers'}
+                            </h4>
                             <div className="space-y-2">
-                                <button onClick={() => cheat('gold')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded border border-slate-700">+1000 Gold</button>
-                                <button onClick={() => cheat('mana')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs rounded border border-slate-700">Fill Mana</button>
-                                <button onClick={() => cheat('heal')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-red-300 text-xs rounded border border-slate-700">Full Heal</button>
-                                <button onClick={() => cheat('draw')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded border border-slate-700">Draw 3 Cards</button>
+                                <button onClick={() => cheat('gold')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded border border-slate-700 flex items-center justify-center gap-1">
+                                    {gameState?.isMultiplayer && <Wifi size={10} className="text-blue-400"/>} +1000 Gold
+                                </button>
+                                <button onClick={() => cheat('mana')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-300 text-xs rounded border border-slate-700 flex items-center justify-center gap-1">
+                                    {gameState?.isMultiplayer && <Wifi size={10} className="text-blue-400"/>} Fill Mana
+                                </button>
+                                <button onClick={() => cheat('heal')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-red-300 text-xs rounded border border-slate-700 flex items-center justify-center gap-1">
+                                    {gameState?.isMultiplayer && <Wifi size={10} className="text-blue-400"/>} Full Heal
+                                </button>
+                                <button onClick={() => cheat('draw')} className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded border border-slate-700 flex items-center justify-center gap-1">
+                                    {gameState?.isMultiplayer && <Wifi size={10} className="text-blue-400"/>} Draw Cards
+                                </button>
                             </div>
                         </div>
 
-                        <div>
-                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><RefreshCw size={12}/> Stance Override</h4>
-                            <div className="space-y-2">
-                                <button onClick={() => cheat('stance_light')} className="w-full py-1.5 bg-yellow-900/20 hover:bg-yellow-900/30 text-yellow-500 text-xs rounded border border-yellow-900/50">Force Light</button>
-                                <button onClick={() => cheat('stance_shadow')} className="w-full py-1.5 bg-purple-900/20 hover:bg-purple-900/30 text-purple-500 text-xs rounded border border-purple-900/50">Force Shadow</button>
+                        {!gameState?.isMultiplayer && (
+                            <div>
+                                <h4 className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><RefreshCw size={12}/> Stance Override</h4>
+                                <div className="space-y-2">
+                                    <button onClick={() => cheat('stance_light')} className="w-full py-1.5 bg-yellow-900/20 hover:bg-yellow-900/30 text-yellow-500 text-xs rounded border border-yellow-900/50">Force Light</button>
+                                    <button onClick={() => cheat('stance_shadow')} className="w-full py-1.5 bg-purple-900/20 hover:bg-purple-900/30 text-purple-500 text-xs rounded border border-purple-900/50">Force Shadow</button>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* Logs */}

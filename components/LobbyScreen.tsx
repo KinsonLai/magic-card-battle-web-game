@@ -533,9 +533,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                         </div>
                                                     )}
 
+                                                    {/* Admin Badge */}
                                                     {player.isAdmin && (
-                                                        <div className="absolute top-3 left-3 flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-red-900/50 text-red-400 border-red-500/30 animate-pulse">
-                                                            ⚡ ADMIN
+                                                        <div className="absolute top-3 left-3 flex items-center gap-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-red-900/80 text-red-200 border-red-500/50 animate-pulse shadow-[0_0_10px_red]">
+                                                            <ShieldAlert size={10}/> ADMIN
                                                         </div>
                                                     )}
 
@@ -548,7 +549,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                                                 {player.nation === NationType.MAGIC && <Zap size={20} className={NATION_CONFIG[player.nation].color} />}
                                                             </div>
                                                             <div>
-                                                                <div className="font-bold text-white text-base flex items-center gap-2">
+                                                                <div className={`font-bold text-base flex items-center gap-2 ${player.isAdmin ? 'text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-400 to-red-400 animate-pulse drop-shadow-[0_0_2px_rgba(255,0,0,0.8)]' : 'text-white'}`}>
                                                                     {player.name}
                                                                     {isMe && <span className="bg-indigo-600 text-[10px] px-1.5 py-0.5 rounded text-white shadow">YOU</span>}
                                                                 </div>

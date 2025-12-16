@@ -428,8 +428,19 @@ io.on('connection', (socket: Socket) => {
 
         if (!gameState) return;
 
+        // --- Admin Cheats ---
         if (action.type === 'ADMIN_COMMAND' && isAdmin) {
-            io.to(currentRoomId).emit('server_log', `[ADMIN] Executed ${action.command}`);
+            const cmd = action.command;
+            const p = gameState.players.find(p => p.id === socket.id);
+            if (p) {
+                if (cmd === 'gold') p.gold += 1000;
+                if (cmd === 'mana') p.mana = p.maxMana;
+                if (cmd === 'heal') p.hp = p.maxHp;
+                if (cmd === 'draw') { /* Handle card draw logic if simple enough, or skip */ }
+                
+                io.to(currentRoomId).emit('state_update', gameState);
+                io.to(currentRoomId).emit('server_log', `⚡ ADMIN used command: ${cmd}`);
+            }
             return;
         }
 

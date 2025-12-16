@@ -61,15 +61,6 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onHost, onGallery, lan
                 </div>
             </button>
         </div>
-        
-        <div className="flex justify-center pt-4">
-            <button 
-                onClick={onSim}
-                className="flex items-center gap-2 px-6 py-3 rounded-full bg-slate-900 border border-slate-700 text-slate-400 hover:text-indigo-400 hover:border-indigo-500 transition-all text-xs font-mono tracking-widest"
-            >
-                <Brain size={14}/> AI_BATTLE_SIMULATION (MCTS)
-            </button>
-        </div>
       </div>
       
       <div className="absolute top-4 right-4 flex gap-2">

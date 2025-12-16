@@ -689,7 +689,8 @@ export const App: React.FC = () => {
   const isHumanTurn = currentPlayer.id === humanPlayer.id && gameState.turnPhase === 'ACTION';
   const isDefensePhase = gameState.turnPhase === 'DEFENSE';
   const amIBeingAttacked = isDefensePhase && gameState.pendingAttack?.targetId === humanPlayer.id;
-  
+  const isAdminPlayer = humanPlayer.isAdmin; // Check admin status
+
   // Selection Logic
   const canPlay = selectedCardIds.length > 0;
   const selectedCards = humanPlayer.hand.filter(c => selectedCardIds.includes(c.id));
@@ -744,6 +745,11 @@ export const App: React.FC = () => {
                       <div className="font-bold text-white text-sm truncate">{humanPlayer.name}</div>
                       <div className="text-[10px] text-slate-400">{NATION_CONFIG[humanPlayer.nation].name}</div>
                   </div>
+                  {isAdminPlayer && (
+                      <button onClick={() => setShowDebug(true)} className="p-1.5 bg-red-900/50 text-red-400 rounded hover:bg-red-900 hover:text-white transition-colors" title="Admin Console">
+                          <Terminal size={14}/>
+                      </button>
+                  )}
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
                   <div className="bg-slate-800 rounded p-1"><div className="text-red-400 font-bold">{humanPlayer.hp}</div><div className="text-[10px] text-slate-500">HP</div></div>
@@ -769,6 +775,9 @@ export const App: React.FC = () => {
                   <span className="text-xs font-bold text-slate-300">Turn {gameState.turn}</span>
               </div>
               <div className="flex items-center gap-3">
+                  {isAdminPlayer && (
+                      <button onClick={() => setShowDebug(true)} className="w-8 h-8 bg-red-900/50 text-red-400 rounded-full flex items-center justify-center border border-red-500/30"><Terminal size={14}/></button>
+                  )}
                   {/* Status Bar in Header */}
                   <div className="flex items-center gap-2 bg-slate-800/50 px-2 py-1 rounded-full border border-slate-700">
                       <div className="flex items-center gap-1"><Heart size={10} className="text-red-500"/><span className="text-xs font-bold text-white">{humanPlayer.hp}</span></div>
@@ -808,7 +817,7 @@ export const App: React.FC = () => {
                                     {opp.isDead ? <Skull size={24}/> : <User size={24}/>}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <div className="font-bold text-white truncate">{opp.name}</div>
+                                    <div className={`font-bold truncate ${opp.isAdmin ? 'text-red-500 animate-pulse drop-shadow-[0_0_5px_red]' : 'text-white'}`}>{opp.name}</div>
                                     <div className="flex gap-2 text-xs">
                                         <span className="text-red-400 flex items-center gap-1"><Heart size={10}/> {opp.hp}</span>
                                         <span className="text-blue-400 flex items-center gap-1"><Zap size={10}/> {opp.mana}</span>
@@ -856,7 +865,7 @@ export const App: React.FC = () => {
                             <div className="flex-1 min-w-0 flex flex-col justify-center">
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-2 overflow-hidden">
-                                        <span className="text-sm font-bold text-white truncate">{opp.name}</span>
+                                        <span className={`text-sm font-bold truncate ${opp.isAdmin ? 'text-red-500 animate-pulse' : 'text-white'}`}>{opp.name}</span>
                                         {/* Mobile Opponent States */}
                                         <div className="flex gap-0.5">
                                             {opp.activeStates.map(state => getStatusIcon(state, true))}
