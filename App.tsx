@@ -15,7 +15,7 @@ import { NATION_CONFIG, ELEMENT_CONFIG, ALIGNMENT_CONFIG, getComplexElementName 
 import { TRANSLATIONS } from './locales';
 import { getIconComponent } from './utils/iconMap';
 import * as Icons from 'lucide-react';
-import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi, AlertCircle, ChevronUp, ChevronDown, Repeat, Eye, LayoutTemplate, Ghost, ZapOff, TrendingDown } from 'lucide-react';
+import { Coins, Heart, Zap, ShoppingBag, Crown, History, ShieldAlert, Crosshair, Skull, Sword, Shield, MessageSquare, Send, XCircle, Target, Hexagon, HelpCircle, Anchor, Power, BookOpen, Factory, Info, BellRing, User, LayoutGrid, List, TrendingUp, Sun, Moon, X, AlertTriangle, Terminal, Menu, Scale, Flame, Droplets, Mountain, Wind, Gem, Sparkles, Wifi, AlertCircle, ChevronUp, ChevronDown, Repeat, Eye, LayoutTemplate, Ghost, ZapOff, TrendingDown, Save } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [screen, setScreen] = useState<'start' | 'lobby' | 'gallery' | 'guide' | 'game' | 'simulation'>('start');
@@ -29,6 +29,8 @@ export const App: React.FC = () => {
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false); // New: Name Input Modal
+  const [playerNameInput, setPlayerNameInput] = useState('');
   const [activeTab, setActiveTab] = useState<'log'|'chat'>('log');
   const [chatInput, setChatInput] = useState('');
   
@@ -59,6 +61,25 @@ export const App: React.FC = () => {
   // Helper to show non-blocking warnings
   const showWarning = (message: string) => {
       setTopNotification({ message, type: 'warning' });
+  };
+
+  // --- Check Name Cookie on Mount ---
+  useEffect(() => {
+      const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
+      if (!savedName) {
+          setShowNameModal(true);
+      }
+  }, []);
+
+  const handleSaveName = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (playerNameInput.trim()) {
+          // Set cookie for 365 days
+          const d = new Date();
+          d.setTime(d.getTime() + (365*24*60*60*1000));
+          document.cookie = `player_name=${encodeURIComponent(playerNameInput.trim())};expires=${d.toUTCString()};path=/`;
+          setShowNameModal(false);
+      }
   };
 
   // --- Route Check for Admin ---
@@ -611,6 +632,28 @@ export const App: React.FC = () => {
                 lang={lang} 
                 setLang={setLang} 
             />
+            {/* Name Input Modal */}
+            {showNameModal && (
+                <div className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
+                    <form onSubmit={handleSaveName} className="bg-slate-900 border border-indigo-500 rounded-xl p-8 w-full max-w-sm flex flex-col gap-6 shadow-2xl shadow-indigo-900/50">
+                        <div className="text-center">
+                            <h2 className="text-2xl font-black text-white mb-2 cinzel">歡迎來到魔法對戰</h2>
+                            <p className="text-slate-400 text-sm">請輸入您的冒險者名稱</p>
+                        </div>
+                        <input 
+                            value={playerNameInput} 
+                            onChange={e=>setPlayerNameInput(e.target.value)} 
+                            placeholder="輸入名稱..." 
+                            className="bg-black/50 border border-slate-700 rounded-xl px-4 py-3 text-white text-center text-lg outline-none focus:border-indigo-500 transition-colors"
+                            autoFocus
+                            maxLength={12}
+                        />
+                        <button type="submit" disabled={!playerNameInput.trim()} className="w-full py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                            開始冒險
+                        </button>
+                    </form>
+                </div>
+            )}
             {showAdminLogin && (
                 <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
                     <form onSubmit={handleAdminLoginSubmit} className="bg-slate-900 border border-indigo-500 rounded-xl p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl shadow-indigo-900/50">
@@ -878,69 +921,50 @@ export const App: React.FC = () => {
           {/* 3. PLAYER DASHBOARD & HAND (Fixed Bottom) */}
           <div className="bg-slate-900 border-t border-slate-800 relative z-50 pb-safe">
               
-              {/* Active Card Inspector (Slide Up Panel) - MOBILE ONLY */}
+              {/* Active Card Inspector (Mobile) - UPDATED: Floats above hand */}
               <div className={`
-                  md:hidden absolute bottom-0 left-0 right-0 bg-slate-900 border-t border-white/10 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-out z-50 flex flex-col
-                  ${activeCard ? 'translate-y-0' : 'translate-y-full pointer-events-none'}
-              `} style={{ maxHeight: '70vh' }}>
-                  
+                  md:hidden absolute bottom-[220px] left-4 right-4 bg-slate-900/95 border border-white/10 rounded-2xl shadow-2xl transition-all duration-300 ease-out z-[50]
+                  ${activeCard ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}
+              `}>
                   {activeCard && (
-                      <div className="p-5 flex flex-col gap-4">
-                          {/* Close Handle */}
-                          <div className="w-12 h-1 bg-slate-700 rounded-full mx-auto -mt-2 mb-2" onClick={() => setSelectedCardIds([])}></div>
-
-                          {/* Header info */}
+                      <div className="p-4 flex flex-col gap-3">
+                          {/* Close Handle / Header */}
                           <div className="flex justify-between items-start">
-                              <div>
-                                  <h3 className="text-xl font-bold text-white leading-none">{t.cards[activeCard.id]?.name || activeCard.name}</h3>
-                                  <div className="flex gap-2 mt-2">
-                                      {/* @ts-ignore */}
-                                      <span className="text-[10px] uppercase font-bold tracking-wider bg-slate-800 px-2 py-0.5 rounded text-slate-400">{t.types[activeCard.type]}</span>
-                                      {activeCard.element && activeCard.element !== ElementType.NEUTRAL && (
-                                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${ELEMENT_CONFIG[activeCard.element].color} bg-slate-800`}>
-                                              {ELEMENT_CONFIG[activeCard.element].name}
-                                          </span>
-                                      )}
-                                  </div>
-                              </div>
-                              <div className="text-right">
-                                  <div className="text-2xl font-mono font-bold text-blue-400">{activeCard.manaCost} <span className="text-xs text-slate-500">MP</span></div>
-                                  {activeCard.cost > 0 && <div className="text-xs text-yellow-500 font-mono">{activeCard.cost} G</div>}
-                              </div>
+                              <h3 className="text-lg font-bold text-white">{t.cards[activeCard.id]?.name || activeCard.name}</h3>
+                              <button onClick={() => setSelectedCardIds([])} className="p-1 bg-slate-800 rounded-full text-slate-400"><X size={16}/></button>
                           </div>
 
-                          {/* Description */}
-                          <div className="bg-black/30 p-3 rounded-xl border border-white/5 text-sm text-slate-300 leading-relaxed max-h-32 overflow-y-auto">
+                          <div className="text-xs text-slate-300 line-clamp-3">
                               {/* @ts-ignore */}
                               {t.cards[activeCard.id]?.desc || activeCard.description}
-                              {preview?.comboName && (
-                                  <div className="mt-2 pt-2 border-t border-white/10 text-yellow-300 font-bold text-xs flex items-center gap-1">
-                                      <Sparkles size={12}/> 連擊: {preview.comboName} {preview.reactionBonusText && `(${preview.reactionBonusText})`}
-                                  </div>
-                              )}
                           </div>
+                          
+                          {preview?.comboName && (
+                              <div className="bg-indigo-900/40 p-2 rounded text-xs text-indigo-200 border border-indigo-500/30 flex items-center gap-2">
+                                  <Sparkles size={12} className="text-yellow-400"/>
+                                  <span>連擊: {preview.comboName}</span>
+                              </div>
+                          )}
 
-                          {/* Action Button */}
-                          <div className="flex gap-3">
-                              <button onClick={() => setSelectedCardIds([])} className="px-4 py-3 bg-slate-800 rounded-xl font-bold text-slate-400">取消</button>
-                              
+                          <div className="flex gap-2 mt-1">
                               {/* Sell Button if single card */}
                               {isHumanTurn && selectedCardIds.length === 1 && (
-                                  <button onClick={handleSell} className="px-4 py-3 bg-yellow-900/30 text-yellow-500 rounded-xl font-bold border border-yellow-700/50 flex flex-col items-center justify-center leading-none min-w-[80px]">
-                                      <span className="text-xs">出售</span>
-                                      <span className="text-[10px] opacity-70">+{Math.floor(activeCard.cost/2)}G</span>
+                                  <button onClick={handleSell} className="px-3 py-2 bg-yellow-900/30 text-yellow-500 rounded-lg font-bold border border-yellow-700/50 flex flex-col items-center justify-center leading-none min-w-[60px]">
+                                      <span className="text-[10px]">出售</span>
+                                      <span className="text-[9px] opacity-70">+{Math.floor(activeCard.cost/2)}G</span>
                                   </button>
                               )}
 
                               <button 
                                   onClick={executePlay}
                                   disabled={!isHumanTurn && !amIBeingAttacked}
-                                  className={`flex-1 py-3 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2
+                                  className={`flex-1 py-3 rounded-xl font-bold text-base shadow-lg flex items-center justify-center gap-2
                                       ${isHumanTurn || amIBeingAttacked ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-indigo-900/50' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}
                                   `}
                               >
                                   {amIBeingAttacked ? '反擊!' : '出牌'}
-                                  {preview && preview.damage > 0 && <span className="bg-black/20 px-2 py-0.5 rounded text-sm font-mono">{preview.damage} DMG</span>}
+                                  {selectedCardIds.length > 1 && <span className="bg-black/20 px-1.5 py-0.5 rounded text-xs">({selectedCardIds.length})</span>}
+                                  {preview && preview.damage > 0 && <span className="bg-black/20 px-1.5 py-0.5 rounded text-xs font-mono">{preview.damage} DMG</span>}
                               </button>
                           </div>
                       </div>
@@ -1009,7 +1033,7 @@ export const App: React.FC = () => {
                              </div>
                          )}
 
-                         <div className="flex-1 p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full md:justify-center md:pb-8">
+                         <div className="flex-1 p-3 overflow-x-auto flex items-center gap-3 px-4 scrollbar-hide h-full md:justify-center md:pb-8 relative z-[60]">
                             {humanPlayer.isDead ? (
                                 <div className="w-full text-center text-red-500 font-bold py-8">已敗陣</div>
                             ) : (
@@ -1028,7 +1052,7 @@ export const App: React.FC = () => {
                                     }
 
                                     return (
-                                        <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-40' : 'md:hover:-translate-y-2'}`}>
+                                        <div key={card.id} className={`relative shrink-0 transition-all duration-300 ${isSelected ? '-translate-y-4 z-[70]' : 'md:hover:-translate-y-2'}`}>
                                             <CardComponent 
                                                 card={card} 
                                                 lang={lang} 
@@ -1036,7 +1060,7 @@ export const App: React.FC = () => {
                                                 disabled={isDisabled} 
                                                 compact={window.innerWidth < 768} 
                                             />
-                                            {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-50 animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
+                                            {isSelected && <div className="absolute -top-2 right-0 bg-indigo-500 text-white rounded-full p-1 shadow-lg border-2 border-slate-900 z-[80] animate-bounce"><Icons.Check size={12} strokeWidth={4} /></div>}
                                         </div>
                                     );
                                 })

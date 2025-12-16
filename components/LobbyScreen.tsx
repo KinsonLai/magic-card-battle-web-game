@@ -5,7 +5,7 @@ import { NATION_CONFIG } from '../constants';
 import { DEFAULT_SETTINGS } from '../services/gameEngine';
 import { socketService } from '../services/socketService';
 import { TRANSLATIONS } from '../locales';
-import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check, X, Sliders } from 'lucide-react';
+import { Crown, Users, TrendingUp, Zap, Settings, ArrowLeft, Bot, User, Copy, Play, RotateCcw, Trash2, Globe, Lock, Search, Plus, CheckCircle, AlertCircle, LogOut, ChevronRight, UserPlus, Server, Monitor, ShieldAlert, Check, X, Sliders, Edit2 } from 'lucide-react';
 
 interface LobbyScreenProps {
   onStart: (players: RoomPlayer[], settings: GameSettings, isOnline?: boolean) => void;
@@ -34,6 +34,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPassword, setNewRoomPassword] = useState('');
   const [newRoomIsPublic, setNewRoomIsPublic] = useState(true);
+  
+  // Name Edit
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState('');
 
   // Room State
   const [onlineRoomId, setOnlineRoomId] = useState<string | null>(null);
@@ -64,7 +68,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
   // Load Name from Cookie on Mount
   useEffect(() => {
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
-      if (savedName) setMyName(savedName);
+      if (savedName) {
+          const decodedName = decodeURIComponent(savedName);
+          setMyName(decodedName);
+          setTempName(decodedName);
+      }
   }, []);
 
   // Sync Local Player info (Name change) for Local Mode
@@ -122,6 +130,16 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   // --- Actions ---
 
+  const saveName = () => {
+      if (tempName.trim()) {
+          setMyName(tempName.trim());
+          const d = new Date();
+          d.setTime(d.getTime() + (365*24*60*60*1000));
+          document.cookie = `player_name=${encodeURIComponent(tempName.trim())};expires=${d.toUTCString()};path=/`;
+          setIsEditingName(false);
+      }
+  };
+
   const getNationName = (key: string) => {
       // @ts-ignore
       return t.nations[key]?.name || NATION_CONFIG[key]?.name || key;
@@ -169,7 +187,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
       // Get cookie name if available (Redundant if useEffect worked, but safe)
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
-      const finalName = savedName || myName;
+      const finalName = savedName ? decodeURIComponent(savedName) : myName;
 
       socketService.createRoom({ 
           player: { name: finalName, nation: myNation },
@@ -199,7 +217,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
 
   const executeJoin = (rid: string, password?: string) => {
       const savedName = document.cookie.split('; ').find(row => row.startsWith('player_name='))?.split('=')[1];
-      const finalName = savedName || myName;
+      const finalName = savedName ? decodeURIComponent(savedName) : myName;
 
       socketService.joinRoom(rid, { name: finalName, nation: myNation }, password, (success, msg, needsPassword) => {
           if (success) {
@@ -421,8 +439,26 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onStart, onBack, lang 
                                         <User size={24} className={NATION_CONFIG[myNation].color}/>
                                     </div>
                                     <div className="flex-1">
-                                        <div className="text-white font-bold text-lg">{myName}</div>
-                                        <div className="text-xs text-slate-500">Rank: Novice</div>
+                                        {isEditingName ? (
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    value={tempName} 
+                                                    onChange={e => setTempName(e.target.value)} 
+                                                    className="w-full bg-black/30 border border-slate-700 rounded px-2 py-1 text-sm outline-none focus:border-indigo-500"
+                                                    autoFocus
+                                                    maxLength={12}
+                                                />
+                                                <button onClick={saveName} className="p-1 bg-green-900/50 text-green-400 rounded hover:bg-green-800"><Check size={14}/></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex justify-between items-center group">
+                                                <div className="text-white font-bold text-lg">{myName}</div>
+                                                <button onClick={() => setIsEditingName(true)} className="p-1 text-slate-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Edit2 size={14}/>
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="text-xs text-slate-500 mt-1">Rank: Novice</div>
                                     </div>
                                 </div>
                                 
