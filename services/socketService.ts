@@ -5,8 +5,8 @@ import { ClientAction, GameSettings, GameState, RoomInfo, RoomPlayer, ChatMessag
 class SocketService {
   private socket: Socket | null = null;
   // Use window.location.origin in production (PROD), otherwise localhost
-  // We safely check if import.meta.env exists to avoid "Cannot read properties of undefined (reading 'PROD')"
-  private url: string = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD) 
+  // Cast import.meta to any to avoid TS2339 error (Property 'env' does not exist on type 'ImportMeta')
+  private url: string = (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.PROD) 
     ? window.location.origin 
     : 'http://localhost:3000';
 

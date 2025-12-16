@@ -18,8 +18,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({ onJoinRoom, onBack, la
   // Connection State
   // Default URL logic: if in prod, use current origin, else localhost
   const [serverUrl, setServerUrl] = useState(() => {
-      // Safely check for env to prevent crash
-      const isProd = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.PROD;
+      // Cast import.meta to any to avoid TS2339 error (Property 'env' does not exist on type 'ImportMeta')
+      const meta = import.meta as any;
+      const isProd = typeof meta !== 'undefined' && meta.env && meta.env.PROD;
       return isProd ? window.location.origin : 'http://localhost:3000';
   });
   
